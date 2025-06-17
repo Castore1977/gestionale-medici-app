@@ -18,7 +18,17 @@ import {
     getDocs, 
     writeBatch
 } from 'firebase/firestore';
-import { Plus, Trash2, Building, UserPlus, Save, X, Clock, Sun, Moon, Upload, Download, AlertCircle, Filter, Edit, Search, ChevronDown, LogOut } from 'lucide-react';
+import { Plus, Trash2, Building, UserPlus, Save, X, Clock, Sun, Moon, Upload, Download, AlertCircle, Filter, Edit, Search, ChevronDown, LogOut, CalendarPlus } from 'lucide-react';
+
+// --- CONFIGURAZIONE FIREBASE ---
+const firebaseConfig = {
+    apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+    authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+    projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+    storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+    appId: process.env.REACT_APP_FIREBASE_APP_ID
+};
 
 
 // --- COMPONENTE AUTENTICAZIONE ---
@@ -118,11 +128,12 @@ const TableView = ({ doctors, structures, alertDays, onDoctorDoubleClick }) => {
     return (
         <div className="bg-gray-800 p-4 sm:p-6 rounded-xl shadow-lg">
             <div className="overflow-x-auto">
-                 <table className="w-full min-w-[1000px] text-left text-sm text-gray-300">
+                 <table className="w-full min-w-[1100px] text-left text-sm text-gray-300">
                     <thead className="bg-gray-700 text-xs text-gray-400 uppercase tracking-wider">
                         <tr>
                             <th scope="col" className="px-6 py-3 rounded-l-lg w-1/5">Medico</th>
                             <th scope="col" className="px-4 py-3 text-center">Ultima Visita</th>
+                            <th scope="col" className="px-4 py-3 text-center">Appuntamento</th>
                             {daysOfWeek.map(day => <th scope="col" key={day} className="px-4 py-3 text-center capitalize">{day}</th>)}
                              <th scope="col" className="px-1 py-3 rounded-r-lg"></th>
                         </tr>
@@ -137,6 +148,7 @@ const TableView = ({ doctors, structures, alertDays, onDoctorDoubleClick }) => {
                                     </div>
                                 </td>
                                 <td className="px-4 py-4 text-center">{doctor.lastVisit ? new Date(doctor.lastVisit).toLocaleDateString('it-IT') : 'N/D'}</td>
+                                <td className="px-4 py-4 text-center">{doctor.appointmentDate ? new Date(doctor.appointmentDate).toLocaleDateString('it-IT') : 'N/D'}</td>
                                 {daysOfWeek.map(day => <td key={day} className="px-4 py-4 text-center align-top h-16">{getShiftAndStructure(doctor.availability?.[day], doctor.structureIds)}</td>)}
                                 <td></td>
                             </tr>
@@ -150,7 +162,7 @@ const TableView = ({ doctors, structures, alertDays, onDoctorDoubleClick }) => {
 
 // --- MODALE PER AGGIUNGERE/MODIFICARE MEDICO ---
 const DoctorModal = ({ isOpen, onClose, onSave, onDelete, structures, initialData }) => {
-    const getInitialState = useCallback(() => initialData || { firstName: '', lastName: '', dateOfBirth: '', structureIds: [], availability: { lunedi: '', martedi: '', mercoledi: '', giovedi: '', venerdi: '', sabato: '', domenica: '' }, notes: '', lastVisit: '' }, [initialData]);
+    const getInitialState = useCallback(() => initialData || { firstName: '', lastName: '', dateOfBirth: '', structureIds: [], availability: { lunedi: '', martedi: '', mercoledi: '', giovedi: '', venerdi: '', sabato: '', domenica: '' }, notes: '', lastVisit: '', appointmentDate: '' }, [initialData]);
     const [doctorData, setDoctorData] = useState(getInitialState());
     const isEditMode = initialData && initialData.id;
     useEffect(() => { if (isOpen) { setDoctorData(getInitialState()); } }, [isOpen, getInitialState]);
@@ -172,6 +184,7 @@ const DoctorModal = ({ isOpen, onClose, onSave, onDelete, structures, initialDat
                     <input name="dateOfBirth" type="date" value={doctorData.dateOfBirth} onChange={handleChange} className="w-full bg-gray-700 p-3 rounded-lg" />
                     <div><h3 className="text-lg font-semibold mb-2">Strutture Associate</h3><div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{structures.map(s => (<label key={s.id} className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer ${doctorData.structureIds.includes(s.id) ? 'bg-cyan-600' : 'bg-gray-700'}`}><input type="checkbox" checked={doctorData.structureIds.includes(s.id)} onChange={() => handleStructureSelection(s.id)} className="form-checkbox h-5 w-5 text-cyan-500" /><span>{s.name}</span></label>))}</div></div>
                     <div><h3 className="text-lg font-semibold my-2">Ultima Visita (doppio click per oggi)</h3><input name="lastVisit" type="date" value={doctorData.lastVisit} onChange={handleChange} onDoubleClick={handleDateDoubleClick} className="w-full bg-gray-700 p-3 rounded-lg" /></div>
+                    <div><h3 className="text-lg font-semibold my-2">Data Appuntamento</h3><input name="appointmentDate" type="date" value={doctorData.appointmentDate} onChange={handleChange} className="w-full bg-gray-700 p-3 rounded-lg" /></div>
                     <div><h3 className="text-lg font-semibold my-2">Note</h3><textarea name="notes" placeholder="Note aggiuntive..." value={doctorData.notes} onChange={handleChange} className="w-full bg-gray-700 p-3 rounded-lg" rows="3"></textarea></div>
                     <div><h3 className="text-lg font-semibold mb-2 flex items-center gap-2"><Clock size={20}/> Orari</h3><div className="grid sm:grid-cols-2 gap-4">{Object.keys(doctorData.availability).map(day => (<div key={day}><label className="capitalize text-gray-400">{day}</label><input type="text" placeholder="Es. 9-12" value={doctorData.availability[day]} onChange={(e) => handleAvailabilityChange(day, e.target.value)} className="w-full mt-1 bg-gray-700 p-2 rounded-lg" /></div>))}</div></div>
                     <div className="flex justify-between items-center gap-4 pt-4">
@@ -224,6 +237,7 @@ const App = () => {
     const [alertDays, setAlertDays] = useState({ yellow: 30, red: 40 });
     const [sortConfig, setSortConfig] = useState({ key: 'lastName', direction: 'asc' });
     const [filterAlertsOnly, setFilterAlertsOnly] = useState(false);
+    const [filterUpcoming, setFilterUpcoming] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [dayFilter, setDayFilter] = useState('');
     const [structureFilter, setStructureFilter] = useState([]);
@@ -237,15 +251,6 @@ const App = () => {
     
     // --- INIZIALIZZAZIONE FIREBASE E AUTH ---
     useEffect(() => {
-        const firebaseConfig = {
-            apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
-            authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
-            projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
-            storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
-            messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
-            appId: process.env.REACT_APP_FIREBASE_APP_ID
-        };
-
         try {
             const app = initializeApp(firebaseConfig);
             const firestoreDb = getFirestore(app);
@@ -302,9 +307,24 @@ const App = () => {
     // --- LOGICA DI FILTRAGGIO E ORDINAMENTO ---
     const processedDoctors = React.useMemo(() => {
         let items = [...doctors];
+        
         if (searchQuery) items = items.filter(doctor => `${doctor.firstName} ${doctor.lastName}`.toLowerCase().includes(searchQuery.toLowerCase()));
         if (dayFilter) items = items.filter(doctor => doctor.availability && doctor.availability[dayFilter] && doctor.availability[dayFilter].trim() !== '');
         if (structureFilter.length > 0) items = items.filter(doctor => doctor.structureIds && doctor.structureIds.some(id => structureFilter.includes(id)));
+        
+        if (filterUpcoming) {
+            items = items.filter(doctor => {
+                if (!doctor.appointmentDate) return false;
+                const today = new Date();
+                const sevenDaysFromNow = new Date();
+                today.setHours(0, 0, 0, 0);
+                sevenDaysFromNow.setDate(today.getDate() + 7);
+                sevenDaysFromNow.setHours(23, 59, 59, 999);
+                const appointmentDate = new Date(doctor.appointmentDate);
+                return appointmentDate >= today && appointmentDate <= sevenDaysFromNow;
+            });
+        }
+        
         if (filterAlertsOnly) {
             items = items.filter(doctor => {
                 if (!doctor.lastVisit) return false;
@@ -332,7 +352,7 @@ const App = () => {
             });
         }
         return items;
-    }, [doctors, sortConfig, structures, filterAlertsOnly, alertDays, searchQuery, dayFilter, structureFilter]);
+    }, [doctors, sortConfig, structures, filterAlertsOnly, alertDays, searchQuery, dayFilter, structureFilter, filterUpcoming]);
 
     const requestSort = (key) => {
         let direction = 'asc';
@@ -424,7 +444,7 @@ const App = () => {
                 });
                 data.doctors.forEach(d => {
                     const { id, ...docData } = d;
-                    batch.set(doc(doctorsPath), { notes: '', lastVisit: '', ...docData });
+                    batch.set(doc(doctorsPath), { notes: '', lastVisit: '', appointmentDate: '', ...docData });
                 });
                 await batch.commit();
             } catch (err) {
@@ -474,6 +494,7 @@ const App = () => {
                             <div className="flex flex-wrap items-center justify-center gap-4 text-sm mb-6 bg-gray-800/50 p-4 rounded-lg">
                                     <div className="flex items-center gap-2"><span className="font-semibold">Ordina per:</span><button onClick={() => requestSort('lastName')} className={`px-3 py-1 rounded-full ${sortConfig.key === 'lastName' ? 'bg-cyan-600' : 'bg-gray-700'}`}>Nome</button><button onClick={() => requestSort('lastVisit')} className={`px-3 py-1 rounded-full ${sortConfig.key === 'lastVisit' ? 'bg-cyan-600' : 'bg-gray-700'}`}>Ultima Visita</button></div>
                                     <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={filterAlertsOnly} onChange={() => setFilterAlertsOnly(!filterAlertsOnly)} className="form-checkbox h-5 w-5 text-cyan-500 bg-gray-900 border-gray-600 rounded focus:ring-cyan-600"/><span className="flex items-center gap-1"><Filter size={14}/> Solo con alert</span></label>
+                                    <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={filterUpcoming} onChange={() => setFilterUpcoming(!filterUpcoming)} className="form-checkbox h-5 w-5 text-cyan-500 bg-gray-900 border-gray-600 rounded focus:ring-cyan-600"/><span className="flex items-center gap-1"><CalendarPlus size={14}/> App. prossimi 7 gg</span></label>
                                     <div className="flex items-center gap-2"><label className="font-semibold" htmlFor="day-filter">Giorno:</label><select id="day-filter" value={dayFilter} onChange={(e) => setDayFilter(e.target.value)} className="bg-gray-700 text-white p-2 rounded-md"><option value="">Qualsiasi</option><option value="lunedi">Lunedì</option><option value="martedi">Martedì</option><option value="mercoledi">Mercoledì</option><option value="giovedi">Giovedì</option><option value="venerdi">Venerdì</option><option value="sabato">Sabato</option><option value="domenica">Domenica</option></select></div>
                                     <div className="relative"><button onClick={() => setIsStructureDropdownOpen(!isStructureDropdownOpen)} className="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded-md">Filtra per Struttura <ChevronDown size={16}/></button>
                                         {isStructureDropdownOpen && (<div className="absolute top-full mt-2 w-56 bg-gray-600 rounded-md shadow-lg z-10 p-2">

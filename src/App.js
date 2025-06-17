@@ -20,12 +20,9 @@ import {
 } from 'firebase/firestore';
 import { Plus, Trash2, Building, UserPlus, Save, X, Clock, Sun, Moon, Upload, Download, AlertCircle, Filter, Edit, Search, ChevronDown, LogOut } from 'lucide-react';
 
-// --- MODALI E COMPONENTI UI (invariati) ---
-// I componenti TableView, DoctorModal, e StructureModal rimangono gli stessi del codice precedente.
-// Per brevità, non sono ripetuti qui, ma andrebbero inclusi nello stesso file o importati.
 
+// --- COMPONENTE AUTENTICAZIONE ---
 const AuthPage = ({ onLogin, onRegister, setAuthError, authError }) => {
-    // Componente per gestire sia il login che la registrazione
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isLogin, setIsLogin] = useState(true);
@@ -80,15 +77,147 @@ const AuthPage = ({ onLogin, onRegister, setAuthError, authError }) => {
 };
 
 
+// --- COMPONENTE VISTA TABELLARE ---
+const TableView = ({ doctors, structures, alertDays, onDoctorDoubleClick }) => {
+    const daysOfWeek = ['lunedi', 'martedi', 'mercoledi', 'giovedi', 'venerdi', 'sabato', 'domenica'];
+
+    const getVisitAlert = (lastVisitDate) => {
+        if (!lastVisitDate) return null;
+        const today = new Date();
+        const visitDate = new Date(lastVisitDate);
+        today.setHours(0, 0, 0, 0);
+        visitDate.setHours(0, 0, 0, 0);
+        const diffTime = today - visitDate;
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays > alertDays.red) return <div className="w-4 h-4 bg-red-500 rounded-full flex-shrink-0" title={`Ultima visita ${diffDays} giorni fa`}></div>;
+        if (diffDays > alertDays.yellow) return <div className="w-4 h-4 bg-yellow-400 rounded-full flex-shrink-0" title={`Ultima visita ${diffDays} giorni fa`}></div>;
+        return <div className="w-4 h-4"></div>;
+    };
+    
+    const getShiftAndStructure = (timeString, structureIds) => {
+        if (!timeString || !timeString.trim()) return null;
+        const slots = timeString.split('/').map(s => s.trim());
+        let morning = false, afternoon = false;
+        slots.forEach(slot => {
+            const startHour = parseInt(slot.split('-')[0], 10);
+            if (!isNaN(startHour)) { if (startHour < 14) morning = true; else afternoon = true; }
+        });
+        const associatedStructures = structureIds?.map(id => structures.find(s => s.id === id)?.name).filter(Boolean).join(', ');
+        return (
+            <div className="flex flex-col items-center justify-center gap-1">
+                <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                    {morning && <span className="flex items-center gap-1 bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-0.5 rounded-full" title="Mattina"><Sun size={12}/> M</span>}
+                    {afternoon && <span className="flex items-center gap-1 bg-indigo-400 text-indigo-900 text-xs font-bold px-2 py-0.5 rounded-full" title="Pomeriggio"><Moon size={12}/> P</span>}
+                </div>
+                {associatedStructures && <span className="text-xs text-gray-400 mt-1 text-center">{associatedStructures}</span>}
+            </div>
+        );
+    };
+
+    return (
+        <div className="bg-gray-800 p-4 sm:p-6 rounded-xl shadow-lg">
+            <div className="overflow-x-auto">
+                 <table className="w-full min-w-[1000px] text-left text-sm text-gray-300">
+                    <thead className="bg-gray-700 text-xs text-gray-400 uppercase tracking-wider">
+                        <tr>
+                            <th scope="col" className="px-6 py-3 rounded-l-lg w-1/5">Medico</th>
+                            <th scope="col" className="px-4 py-3 text-center">Ultima Visita</th>
+                            {daysOfWeek.map(day => <th scope="col" key={day} className="px-4 py-3 text-center capitalize">{day}</th>)}
+                             <th scope="col" className="px-1 py-3 rounded-r-lg"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {doctors.map(doctor => (
+                            <tr key={doctor.id} onDoubleClick={() => onDoctorDoubleClick(doctor)} className="bg-gray-800 border-b border-gray-700 hover:bg-gray-700/50 transition-colors cursor-pointer">
+                                <td className="px-6 py-4 font-medium text-white whitespace-nowrap">
+                                    <div className="flex items-center gap-3">
+                                        {getVisitAlert(doctor.lastVisit)}
+                                        <span>{doctor.firstName} {doctor.lastName}</span>
+                                    </div>
+                                </td>
+                                <td className="px-4 py-4 text-center">{doctor.lastVisit ? new Date(doctor.lastVisit).toLocaleDateString('it-IT') : 'N/D'}</td>
+                                {daysOfWeek.map(day => <td key={day} className="px-4 py-4 text-center align-top h-16">{getShiftAndStructure(doctor.availability?.[day], doctor.structureIds)}</td>)}
+                                <td></td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+};
+
+// --- MODALE PER AGGIUNGERE/MODIFICARE MEDICO ---
+const DoctorModal = ({ isOpen, onClose, onSave, onDelete, structures, initialData }) => {
+    const getInitialState = useCallback(() => initialData || { firstName: '', lastName: '', dateOfBirth: '', structureIds: [], availability: { lunedi: '', martedi: '', mercoledi: '', giovedi: '', venerdi: '', sabato: '', domenica: '' }, notes: '', lastVisit: '' }, [initialData]);
+    const [doctorData, setDoctorData] = useState(getInitialState());
+    const isEditMode = initialData && initialData.id;
+    useEffect(() => { if (isOpen) { setDoctorData(getInitialState()); } }, [isOpen, getInitialState]);
+    if (!isOpen) return null;
+
+    const handleChange = (e) => setDoctorData(p => ({ ...p, [e.target.name]: e.target.value }));
+    const handleAvailabilityChange = (day, val) => setDoctorData(p => ({ ...p, availability: { ...p.availability, [day]: val } }));
+    const handleStructureSelection = (id) => setDoctorData(p => ({ ...p, structureIds: p.structureIds.includes(id) ? p.structureIds.filter(sid => sid !== id) : [...p.structureIds, id] }));
+    const handleSubmit = (e) => { e.preventDefault(); onSave(doctorData); };
+    const handleDateDoubleClick = () => setDoctorData(p => ({ ...p, lastVisit: new Date().toISOString().split('T')[0] }));
+    const handleDeleteClick = () => { if (doctorData?.id) onDelete(doctorData.id); };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
+            <div className="bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center mb-4"><h2 className="text-2xl font-bold text-cyan-400">{isEditMode ? 'Modifica Medico' : 'Nuovo Medico'}</h2><button onClick={onClose} className="text-gray-400 hover:text-white"><X size={28}/></button></div>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div className="grid md:grid-cols-2 gap-4"><input name="firstName" placeholder="Nome (es. Dott.)" value={doctorData.firstName} onChange={handleChange} className="bg-gray-700 p-3 rounded-lg" /><input name="lastName" placeholder="Cognome" value={doctorData.lastName} onChange={handleChange} className="bg-gray-700 p-3 rounded-lg" /></div>
+                    <input name="dateOfBirth" type="date" value={doctorData.dateOfBirth} onChange={handleChange} className="w-full bg-gray-700 p-3 rounded-lg" />
+                    <div><h3 className="text-lg font-semibold mb-2">Strutture Associate</h3><div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{structures.map(s => (<label key={s.id} className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer ${doctorData.structureIds.includes(s.id) ? 'bg-cyan-600' : 'bg-gray-700'}`}><input type="checkbox" checked={doctorData.structureIds.includes(s.id)} onChange={() => handleStructureSelection(s.id)} className="form-checkbox h-5 w-5 text-cyan-500" /><span>{s.name}</span></label>))}</div></div>
+                    <div><h3 className="text-lg font-semibold my-2">Ultima Visita (doppio click per oggi)</h3><input name="lastVisit" type="date" value={doctorData.lastVisit} onChange={handleChange} onDoubleClick={handleDateDoubleClick} className="w-full bg-gray-700 p-3 rounded-lg" /></div>
+                    <div><h3 className="text-lg font-semibold my-2">Note</h3><textarea name="notes" placeholder="Note aggiuntive..." value={doctorData.notes} onChange={handleChange} className="w-full bg-gray-700 p-3 rounded-lg" rows="3"></textarea></div>
+                    <div><h3 className="text-lg font-semibold mb-2 flex items-center gap-2"><Clock size={20}/> Orari</h3><div className="grid sm:grid-cols-2 gap-4">{Object.keys(doctorData.availability).map(day => (<div key={day}><label className="capitalize text-gray-400">{day}</label><input type="text" placeholder="Es. 9-12" value={doctorData.availability[day]} onChange={(e) => handleAvailabilityChange(day, e.target.value)} className="w-full mt-1 bg-gray-700 p-2 rounded-lg" /></div>))}</div></div>
+                    <div className="flex justify-between items-center gap-4 pt-4">
+                         <div>{isEditMode && <button type="button" onClick={handleDeleteClick} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2"><Trash2 size={18} /> Elimina</button>}</div>
+                        <div className="flex gap-4"><button type="button" onClick={onClose} className="bg-gray-600 font-bold py-2 px-4 rounded-lg">Annulla</button><button type="submit" className="bg-cyan-500 font-bold py-2 px-4 rounded-lg flex items-center gap-2"><Save size={18}/> Salva</button></div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+// --- MODALE PER AGGIUNGERE/MODIFICARE STRUTTURA ---
+const StructureModal = ({ isOpen, onClose, onSave, initialData }) => {
+    const getInitialState = useCallback(() => initialData || { name: '', address: '' }, [initialData]);
+    const [structureData, setStructureData] = useState(getInitialState());
+    const isEditMode = initialData && initialData.id;
+
+    useEffect(() => { if (isOpen) setStructureData(getInitialState()); }, [isOpen, getInitialState]);
+    if (!isOpen) return null;
+
+    const handleChange = (e) => setStructureData(p => ({ ...p, [e.target.name]: e.target.value }));
+    const handleSubmit = (e) => { e.preventDefault(); onSave(structureData); };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
+            <div className="bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-lg">
+                <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold text-cyan-400">{isEditMode ? 'Modifica Struttura' : 'Nuova Struttura'}</h2><button onClick={onClose} className="text-gray-400 hover:text-white"><X size={28}/></button></div>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div><label className="text-lg font-semibold mb-2">Nome Struttura</label><input name="name" placeholder="Nome della struttura" value={structureData.name} onChange={handleChange} className="w-full mt-1 bg-gray-700 p-3 rounded-lg" /></div>
+                    <div><label className="text-lg font-semibold mb-2">Indirizzo</label><input name="address" placeholder="Indirizzo completo" value={structureData.address} onChange={handleChange} className="w-full mt-1 bg-gray-700 p-3 rounded-lg" /></div>
+                    <div className="flex justify-end gap-4 pt-4"><button type="button" onClick={onClose} className="bg-gray-600 font-bold py-2 px-4 rounded-lg">Annulla</button><button type="submit" className="bg-cyan-500 font-bold py-2 px-4 rounded-lg flex items-center gap-2"><Save size={18}/> Salva</button></div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+
 const App = () => {
     // --- STATI GLOBALI ---
     const [db, setDb] = useState(null);
     const [auth, setAuth] = useState(null);
-    const [user, setUser] = useState(null); // Contiene l'oggetto utente da Firebase Auth
+    const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [authError, setAuthError] = useState('');
-    
-    // ... (tutti gli altri stati dell'applicazione: activeTab, doctors, structures, etc.)
     const [activeTab, setActiveTab] = useState('medici');
     const [doctors, setDoctors] = useState([]);
     const [structures, setStructures] = useState([]);
@@ -108,7 +237,6 @@ const App = () => {
     
     // --- INIZIALIZZAZIONE FIREBASE E AUTH ---
     useEffect(() => {
-        // La configurazione di Firebase ora dovrebbe provenire da variabili d'ambiente
         const firebaseConfig = {
             apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
             authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
@@ -132,6 +260,7 @@ const App = () => {
             return () => unsubscribe();
         } catch (e) {
             console.error("Errore di configurazione Firebase. Assicurati che le variabili d'ambiente siano corrette.", e);
+            setAuthError("Errore di configurazione. Controlla la console.");
             setIsLoading(false);
         }
     }, []);
@@ -144,17 +273,11 @@ const App = () => {
             return;
         }
 
-        // Fetch Doctors
         const doctorsQuery = collection(db, 'users', user.uid, 'doctors');
-        const unsubDoctors = onSnapshot(doctorsQuery, snap => {
-            setDoctors(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-        }, err => console.error("Errore fetch medici:", err));
+        const unsubDoctors = onSnapshot(doctorsQuery, snap => setDoctors(snap.docs.map(d => ({ id: d.id, ...d.data() }))), err => console.error("Errore fetch medici:", err));
 
-        // Fetch Structures
         const structuresQuery = collection(db, 'users', user.uid, 'structures');
-        const unsubStructures = onSnapshot(structuresQuery, snap => {
-            setStructures(snap.docs.map(s => ({ id: s.id, ...s.data() })));
-        }, err => console.error("Errore fetch strutture:", err));
+        const unsubStructures = onSnapshot(structuresQuery, snap => setStructures(snap.docs.map(s => ({ id: s.id, ...s.data() }))), err => console.error("Errore fetch strutture:", err));
 
         return () => {
             unsubDoctors();
@@ -162,44 +285,162 @@ const App = () => {
         };
     }, [user, db]);
 
-
     // --- FUNZIONI DI AUTENTICAZIONE ---
     const handleRegister = (email, password) => {
-        createUserWithEmailAndPassword(auth, email, password)
-            .catch(error => setAuthError(error.message));
+        if (!auth) return;
+        createUserWithEmailAndPassword(auth, email, password).catch(error => setAuthError(error.message));
     };
     const handleLogin = (email, password) => {
-        signInWithEmailAndPassword(auth, email, password)
-            .catch(error => setAuthError(error.message));
+        if (!auth) return;
+        signInWithEmailAndPassword(auth, email, password).catch(error => setAuthError(error.message));
     };
     const handleLogout = () => {
+        if (!auth) return;
         signOut(auth);
     };
 
-    // --- FUNZIONI CRUD (modificate per usare i percorsi utente) ---
-    const handleSaveDoctor = async (doctorData) => {
-        if (!user) return;
-        const path = `users/${user.uid}/doctors`;
-        if (doctorData.id) {
-            await setDoc(doc(db, path, doctorData.id), doctorData);
-        } else {
-            await addDoc(collection(db, path), doctorData);
+    // --- LOGICA DI FILTRAGGIO E ORDINAMENTO ---
+    const processedDoctors = React.useMemo(() => {
+        let items = [...doctors];
+        if (searchQuery) items = items.filter(doctor => `${doctor.firstName} ${doctor.lastName}`.toLowerCase().includes(searchQuery.toLowerCase()));
+        if (dayFilter) items = items.filter(doctor => doctor.availability && doctor.availability[dayFilter] && doctor.availability[dayFilter].trim() !== '');
+        if (structureFilter.length > 0) items = items.filter(doctor => doctor.structureIds && doctor.structureIds.some(id => structureFilter.includes(id)));
+        if (filterAlertsOnly) {
+            items = items.filter(doctor => {
+                if (!doctor.lastVisit) return false;
+                const today = new Date();
+                const visitDate = new Date(doctor.lastVisit);
+                today.setHours(0, 0, 0, 0); visitDate.setHours(0, 0, 0, 0);
+                const diffTime = today - visitDate;
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                return diffDays > alertDays.yellow;
+            });
         }
-        // ... (resto della logica)
+        if (sortConfig.key !== null) {
+            items.sort((a, b) => {
+                let aValue = a[sortConfig.key];
+                let bValue = b[sortConfig.key];
+                if (sortConfig.key === 'structure') {
+                    const getFirstName = (ids) => ids?.map(id => structures.find(s => s.id === id)?.name).filter(Boolean)[0] || '';
+                    aValue = getFirstName(a.structureIds);
+                    bValue = getFirstName(b.structureIds);
+                }
+                if (!aValue) return 1; if (!bValue) return -1;
+                if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+                if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+        return items;
+    }, [doctors, sortConfig, structures, filterAlertsOnly, alertDays, searchQuery, dayFilter, structureFilter]);
+
+    const requestSort = (key) => {
+        let direction = 'asc';
+        if (sortConfig.key === key && sortConfig.direction === 'asc') { direction = 'desc'; }
+        setSortConfig({ key, direction });
     };
-    // ... (Tutte le altre funzioni CRUD come handleDelete, handleSaveStructure, etc., 
-    //      devono essere modificate per usare il path corretto: `users/${user.uid}/...`)
+    const handleStructureFilterChange = (id) => setStructureFilter(prev => prev.includes(id) ? prev.filter(sid => sid !== id) : [...prev, id]);
 
-    // --- RENDER ---
-    if (isLoading) {
-        return <div className="flex items-center justify-center h-screen bg-gray-900 text-white">Caricamento...</div>;
-    }
+    // --- FUNZIONI MODALI ---
+    const handleOpenDoctorModal = (doctor = null) => { setSelectedDoctor(doctor); setIsDoctorModalOpen(true); };
+    const handleCloseDoctorModal = () => setIsDoctorModalOpen(false);
+    const handleOpenStructureModal = (structure = null) => { setSelectedStructure(structure); setIsStructureModalOpen(true); };
+    const handleCloseStructureModal = () => setIsStructureModalOpen(false);
+
+    // --- FUNZIONI CRUD ---
+    const handleSaveDoctor = async (doctorData) => {
+        if (!user || !db) return;
+        if (!doctorData.firstName?.trim() || !doctorData.lastName?.trim()) { alert("Nome e cognome sono obbligatori."); return; }
+        try {
+            const path = `users/${user.uid}/doctors`;
+            if (doctorData.id) {
+                const { id, ...dataToSave } = doctorData;
+                await setDoc(doc(db, path, id), dataToSave);
+            } else {
+                await addDoc(collection(db, path), doctorData);
+            }
+            handleCloseDoctorModal();
+        } catch (error) { console.error("Error saving doctor", error); }
+    };
+    const handleDeleteDoctor = async (id) => {
+        if (!user || !db) return;
+        try {
+            await deleteDoc(doc(db, `users/${user.uid}/doctors`, id));
+            handleCloseDoctorModal();
+        } catch (error) { console.error("Error deleting doctor:", error); }
+    };
+    const handleSaveStructure = async (structureData) => {
+        if (!user || !db) return;
+        if (!structureData.name?.trim()) { alert("Il nome della struttura è obbligatorio."); return; }
+        try {
+            const path = `users/${user.uid}/structures`;
+            if (structureData.id) {
+                const { id, ...dataToSave } = structureData;
+                await setDoc(doc(db, path, id), dataToSave);
+            } else {
+                await addDoc(collection(db, path), structureData);
+            }
+            handleCloseStructureModal();
+        } catch (error) { console.error("Error saving structure:", error); }
+    };
+    const handleDeleteStructure = async (id) => {
+        if (!user || !db) return;
+        try {
+            const path = `users/${user.uid}/structures`;
+            const doctorsPath = `users/${user.uid}/doctors`;
+            const batch = writeBatch(db);
+            const doctorsToUpdate = doctors.filter(d => d.structureIds?.includes(id));
+            doctorsToUpdate.forEach(d => {
+                const newIds = d.structureIds.filter(sid => sid !== id);
+                batch.update(doc(db, doctorsPath, d.id), { structureIds: newIds });
+            });
+            await batch.commit();
+            await deleteDoc(doc(db, path, id));
+        } catch (error) { console.error(error); }
+    };
+
+    // --- FUNZIONI IMPORT/EXPORT ---
+    const handleExport = () => { const link = document.createElement("a"); link.href = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ doctors, structures }, null, 2))}`; link.download = "gestionale_medici_backup.json"; link.click(); };
+    const handleImport = async (event) => {
+        if (!user || !db) return;
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const data = JSON.parse(e.target.result);
+                if (!data.doctors || !data.structures) throw new Error("File format invalid");
+                setIsLoading(true);
+                const batch = writeBatch(db);
+                const doctorsPath = collection(db, 'users', user.uid, 'doctors');
+                const structuresPath = collection(db, 'users', user.uid, 'structures');
+                const existingDocs = await getDocs(doctorsPath);
+                existingDocs.forEach(d => batch.delete(d.ref));
+                const existingStructs = await getDocs(structuresPath);
+                existingStructs.forEach(s => batch.delete(s.ref));
+                data.structures.forEach(s => {
+                    const { id, ...structData } = s;
+                    batch.set(doc(structuresPath, id || undefined), structData);
+                });
+                data.doctors.forEach(d => {
+                    const { id, ...docData } = d;
+                    batch.set(doc(doctorsPath), { notes: '', lastVisit: '', ...docData });
+                });
+                await batch.commit();
+            } catch (err) {
+                console.error(err);
+            } finally {
+                setIsLoading(false);
+                event.target.value = null;
+            }
+        };
+        reader.readAsText(file);
+    };
+
+    if (isLoading) return <div className="flex items-center justify-center h-screen bg-gray-900 text-white">Caricamento...</div>;
     
-    if (!user) {
-        return <AuthPage onLogin={handleLogin} onRegister={handleRegister} setAuthError={setAuthError} authError={authError} />;
-    }
+    if (!user) return <AuthPage onLogin={handleLogin} onRegister={handleRegister} setAuthError={setAuthError} authError={authError} />;
 
-    // --- PARTE DELL'APP QUANDO L'UTENTE È AUTENTICATO ---
     return (
         <div className="bg-gray-900 text-white min-h-screen font-sans p-4 sm:p-6 md:p-8">
             <div className="max-w-7xl mx-auto">
@@ -210,14 +451,56 @@ const App = () => {
                             <p className="text-gray-400 mt-2">Utente: {user.email}</p>
                         </div>
                         <div className="flex items-center gap-2">
-                             {/* ... (pulsanti import/export) ... */}
+                            <input type="file" id="import-file" className="hidden" accept=".json" onChange={handleImport} />
+                            <label htmlFor="import-file" className="inline-flex items-center gap-2 bg-gray-700 hover:bg-gray-600 font-bold py-2 px-4 rounded-lg cursor-pointer"><Upload size={18} /> Importa</label>
+                            <button onClick={handleExport} className="inline-flex items-center gap-2 bg-cyan-500 hover:bg-cyan-600 font-bold py-2 px-4 rounded-lg"><Download size={18} /> Esporta</button>
                             <button onClick={handleLogout} className="inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 font-bold py-2 px-4 rounded-lg"><LogOut size={18} /> Logout</button>
                         </div>
                     </div>
                 </header>
-                 {/* ... (tutta la UI principale con tab, filtri e tabella) ... */}
+
+                <div className="flex border-b border-gray-700 mb-6"><button onClick={() => setActiveTab('medici')} className={`py-2 px-4 text-lg font-medium ${activeTab === 'medici' ? 'border-b-2 border-cyan-400 text-cyan-400' : 'text-gray-400 hover:text-white'}`}>Riepilogo Medici</button><button onClick={() => setActiveTab('strutture')} className={`py-2 px-4 text-lg font-medium ${activeTab === 'strutture' ? 'border-b-2 border-cyan-400 text-cyan-400' : 'text-gray-400 hover:text-white'}`}>Gestione Strutture</button></div>
+                
+                <main>
+                    {activeTab === 'medici' && (
+                        <>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+                                <button onClick={() => handleOpenDoctorModal()} className="lg:col-span-1 inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-4 rounded-lg shadow-lg"><UserPlus size={20} /> Aggiungi Medico</button>
+                                <div className="relative lg:col-span-2">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20}/>
+                                    <input type="text" placeholder="Cerca medico..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-gray-700 p-3 pl-10 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"/>
+                                </div>
+                            </div>
+                            <div className="flex flex-wrap items-center justify-center gap-4 text-sm mb-6 bg-gray-800/50 p-4 rounded-lg">
+                                    <div className="flex items-center gap-2"><span className="font-semibold">Ordina per:</span><button onClick={() => requestSort('lastName')} className={`px-3 py-1 rounded-full ${sortConfig.key === 'lastName' ? 'bg-cyan-600' : 'bg-gray-700'}`}>Nome</button><button onClick={() => requestSort('lastVisit')} className={`px-3 py-1 rounded-full ${sortConfig.key === 'lastVisit' ? 'bg-cyan-600' : 'bg-gray-700'}`}>Ultima Visita</button></div>
+                                    <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={filterAlertsOnly} onChange={() => setFilterAlertsOnly(!filterAlertsOnly)} className="form-checkbox h-5 w-5 text-cyan-500 bg-gray-900 border-gray-600 rounded focus:ring-cyan-600"/><span className="flex items-center gap-1"><Filter size={14}/> Solo con alert</span></label>
+                                    <div className="flex items-center gap-2"><label className="font-semibold" htmlFor="day-filter">Giorno:</label><select id="day-filter" value={dayFilter} onChange={(e) => setDayFilter(e.target.value)} className="bg-gray-700 text-white p-2 rounded-md"><option value="">Qualsiasi</option><option value="lunedi">Lunedì</option><option value="martedi">Martedì</option><option value="mercoledi">Mercoledì</option><option value="giovedi">Giovedì</option><option value="venerdi">Venerdì</option><option value="sabato">Sabato</option><option value="domenica">Domenica</option></select></div>
+                                    <div className="relative"><button onClick={() => setIsStructureDropdownOpen(!isStructureDropdownOpen)} className="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded-md">Filtra per Struttura <ChevronDown size={16}/></button>
+                                        {isStructureDropdownOpen && (<div className="absolute top-full mt-2 w-56 bg-gray-600 rounded-md shadow-lg z-10 p-2">
+                                            <button onClick={() => setStructureFilter([])} className="w-full text-left p-1.5 rounded-md hover:bg-gray-500 font-semibold mb-1">Tutte le strutture</button>
+                                            <hr className="border-gray-500 mb-1"/>
+                                            {structures.map(s => (<label key={s.id} className="flex items-center gap-2 p-1.5 rounded-md hover:bg-gray-500 cursor-pointer"><input type="checkbox" checked={structureFilter.includes(s.id)} onChange={() => handleStructureFilterChange(s.id)} className="form-checkbox h-4 w-4 text-cyan-500"/>{s.name}</label>))}
+                                        </div>)}
+                                    </div>
+                            </div>
+                             <div className="bg-gray-800/50 p-4 rounded-lg mb-6 flex items-center justify-center flex-wrap gap-x-6 gap-y-3">
+                                <h3 className="text-lg font-semibold text-cyan-400 flex items-center gap-2"><AlertCircle size={20} /> Impostazioni Alert</h3>
+                                <div className="flex items-center gap-2"><label htmlFor="yellow-days" className="text-sm text-yellow-300">Giallo (giorni):</label><input type="number" id="yellow-days" value={alertDays.yellow} onChange={(e) => setAlertDays(p => ({ ...p, yellow: Number(e.target.value) || 0 }))} className="bg-gray-700 w-20 p-2 rounded-md"/></div>
+                                <div className="flex items-center gap-2"><label htmlFor="red-days" className="text-sm text-red-300">Rosso (giorni):</label><input type="number" id="red-days" value={alertDays.red} onChange={(e) => setAlertDays(p => ({ ...p, red: Number(e.target.value) || 0 }))} className="bg-gray-700 w-20 p-2 rounded-md"/></div>
+                            </div>
+                            <TableView doctors={processedDoctors} structures={structures} alertDays={alertDays} onDoctorDoubleClick={handleOpenDoctorModal} />
+                        </>
+                    )}
+                    {activeTab === 'strutture' && (
+                        <div>
+                            <div className="flex justify-start mb-6"><button onClick={() => handleOpenStructureModal()} className="inline-flex items-center gap-2 bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-4 rounded-lg shadow-lg"><Plus size={20} /> Aggiungi Struttura</button></div>
+                            <div className="space-y-4">{structures.map(s => (<div key={s.id} className="bg-gray-800 p-4 rounded-lg flex justify-between items-center shadow-md"><div><p className="font-bold text-lg">{s.name}</p><p className="text-gray-400">{s.address}</p></div><div className="flex gap-2"><button onClick={() => handleOpenStructureModal(s)} className="text-blue-400 p-2 rounded-full hover:bg-gray-700"><Edit size={20} /></button><button onClick={() => handleDeleteStructure(s.id)} className="text-red-400 p-2 rounded-full hover:bg-gray-700"><Trash2 size={20} /></button></div></div>))}</div>
+                        </div>
+                    )}
+                </main>
             </div>
-             {/* ... (tutti i modali) ... */}
+            <DoctorModal isOpen={isDoctorModalOpen} onClose={handleCloseDoctorModal} onSave={handleSaveDoctor} onDelete={handleDeleteDoctor} structures={structures} initialData={selectedDoctor} />
+            <StructureModal isOpen={isStructureModalOpen} onClose={handleCloseStructureModal} onSave={handleSaveStructure} initialData={selectedStructure} />
         </div>
     );
 };

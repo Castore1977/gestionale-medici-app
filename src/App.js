@@ -107,7 +107,6 @@ const TableView = ({ doctors, structures, alertDays, onDoctorDoubleClick, onSetT
         if (diffDays > alertDays.red) return <div className="w-4 h-4 bg-red-500 rounded-full flex-shrink-0" title={`Ultima visita ${diffDays} giorni fa`}></div>;
         if (diffDays > alertDays.yellow) return <div className="w-4 h-4 bg-yellow-400 rounded-full flex-shrink-0" title={`Ultima visita ${diffDays} giorni fa`}></div>;
         
-        // Altrimenti è verde
         return <div className="w-4 h-4 bg-green-500 rounded-full flex-shrink-0" title={`Ultima visita ${diffDays} giorni fa`}></div>;
     };
 
@@ -145,7 +144,7 @@ const TableView = ({ doctors, structures, alertDays, onDoctorDoubleClick, onSetT
                     </thead>
                     <tbody>
                         {doctors.map(doctor => (
-                            <tr key={doctor.id} onDoubleClick={() => onDoctorDoubleClick(doctor)} className="bg-gray-800 border-b border-gray-700 hover:bg-gray-700/50 transition-colors cursor-pointer group">
+                            <tr key={doctor.id} onDoubleClick={() => onDoctorDoubleClick(doctor)} className="bg-gray-800 border-b border-gray-700 hover:bg-gray-700/50 transition-colors cursor-pointer">
                                 <td className="px-6 py-4 font-medium text-white whitespace-nowrap">
                                     <div className="flex items-center justify-between gap-3">
                                         <div className="flex items-center gap-3">
@@ -157,7 +156,7 @@ const TableView = ({ doctors, structures, alertDays, onDoctorDoubleClick, onSetT
                                                 e.stopPropagation();
                                                 onSetTodayAsLastVisit(doctor.id);
                                             }}
-                                            className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-1 px-2 rounded-lg flex items-center gap-1.5 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                            className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-1 px-2 rounded-lg flex items-center gap-1.5"
                                             title="Imposta data visita a oggi"
                                         >
                                             <CalendarPlus size={16} />
@@ -195,7 +194,6 @@ const DoctorModal = ({ isOpen, onClose, onSave, onDelete, structures, initialDat
     const handleSetVisitTodayClick = () => {
         if (doctorData?.id) {
             onSetTodayAsLastVisit(doctorData.id);
-            // Aggiorna lo stato locale per un feedback immediato
             setDoctorData(p => ({ ...p, lastVisit: new Date().toISOString().split('T')[0] }));
         }
     };
@@ -263,6 +261,30 @@ const StructureModal = ({ isOpen, onClose, onSave, initialData }) => {
     );
 };
 
+// --- COMPONENTE MODALE DI AVVISO/CONFERMA ---
+const ConfirmationModal = ({ isOpen, title, message, onConfirm, onCancel, confirmText = 'Conferma', cancelText = 'Annulla' }) => {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-[60]">
+            <div className="bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-sm text-white">
+                <h2 className="text-xl font-bold text-cyan-400 mb-4">{title}</h2>
+                <p className="text-gray-300 mb-6">{message}</p>
+                <div className="flex justify-end gap-4">
+                    {onCancel && (
+                        <button onClick={onCancel} className="bg-gray-600 hover:bg-gray-500 font-bold py-2 px-4 rounded-lg">
+                            {cancelText}
+                        </button>
+                    )}
+                    <button onClick={onConfirm} className="bg-cyan-600 hover:bg-cyan-500 font-bold py-2 px-4 rounded-lg">
+                        {confirmText}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 const App = () => {
     // --- STATI GLOBALI ---
@@ -288,10 +310,19 @@ const App = () => {
     const [isStructureModalOpen, setIsStructureModalOpen] = useState(false);
     const [selectedStructure, setSelectedStructure] = useState(null);
     const [isStructureDropdownOpen, setIsStructureDropdownOpen] = useState(false);
+    const [modalState, setModalState] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {}, onCancel: null });
+
 
     // --- INIZIALIZZAZIONE FIREBASE E AUTH ---
     useEffect(() => {
         try {
+            // Verifica che le chiavi non siano i placeholder
+            if (firebaseConfig.apiKey === "YOUR_API_KEY") {
+                 console.error("Configurazione Firebase non valida. Sostituisci i placeholder in firebaseConfig.");
+                 setAuthError("Configurazione Firebase mancante. Controlla la console per i dettagli.");
+                 setIsLoading(false);
+                 return;
+            }
             const app = initializeApp(firebaseConfig);
             const firestoreDb = getFirestore(app);
             const firebaseAuth = getAuth(app);
@@ -304,13 +335,13 @@ const App = () => {
             });
             return () => unsubscribe();
         } catch (e) {
-            console.error("Errore di configurazione Firebase. Assicurati che le variabili d'ambiente siano corrette.", e);
+            console.error("Errore di configurazione Firebase.", e);
             setAuthError("Errore di configurazione. Controlla la console.");
             setIsLoading(false);
         }
     }, []);
 
-    // --- FETCH DATI SPECIFICI DELL'UTENTE (CORRETTO) ---
+    // --- FETCH DATI SPECIFICI DELL'UTENTE ---
     useEffect(() => {
         if (!user || !db) {
             setDoctors([]);
@@ -411,7 +442,7 @@ const App = () => {
     const handleSetTodayAsLastVisit = async (doctorId) => {
         if (!user || !db) return;
         try {
-            const today = new Date().toISOString().split('T')[0]; // Formato YYYY-MM-DD
+            const today = new Date().toISOString().split('T')[0];
             const doctorRef = doc(db, `users/${user.uid}/doctors`, doctorId);
             await setDoc(doctorRef, { lastVisit: today }, { merge: true });
         } catch (error) {
@@ -421,7 +452,10 @@ const App = () => {
 
     const handleSaveDoctor = async (doctorData) => {
         if (!user || !db) return;
-        if (!doctorData.firstName?.trim() || !doctorData.lastName?.trim()) { alert("Nome e cognome sono obbligatori."); return; }
+        if (!doctorData.firstName?.trim() || !doctorData.lastName?.trim()) { 
+            setModalState({ isOpen: true, title: 'Dati Mancanti', message: 'Nome e cognome sono obbligatori.', onConfirm: () => setModalState({isOpen: false}), onCancel: null, confirmText: 'OK' });
+            return; 
+        }
         try {
             const path = `users/${user.uid}/doctors`;
             if (doctorData.id) {
@@ -433,16 +467,26 @@ const App = () => {
             handleCloseDoctorModal();
         } catch (error) { console.error("Error saving doctor", error); }
     };
+
     const handleDeleteDoctor = async (id) => {
-        if (!user || !db || !window.confirm("Sei sicuro di voler eliminare questo medico?")) return;
-        try {
-            await deleteDoc(doc(db, `users/${user.uid}/doctors`, id));
-            handleCloseDoctorModal();
-        } catch (error) { console.error("Error deleting doctor:", error); }
+        if (!user || !db) return;
+        const confirmDelete = async () => {
+            try {
+                await deleteDoc(doc(db, `users/${user.uid}/doctors`, id));
+                handleCloseDoctorModal();
+            } catch (error) { console.error("Error deleting doctor:", error); }
+            finally { setModalState({ isOpen: false }); }
+        };
+
+        setModalState({ isOpen: true, title: 'Conferma Eliminazione', message: 'Sei sicuro di voler eliminare questo medico? L\'azione è irreversibile.', onConfirm: confirmDelete, onCancel: () => setModalState({isOpen: false}) });
     };
+
     const handleSaveStructure = async (structureData) => {
         if (!user || !db) return;
-        if (!structureData.name?.trim()) { alert("Il nome della struttura è obbligatorio."); return; }
+        if (!structureData.name?.trim()) { 
+            setModalState({ isOpen: true, title: 'Dati Mancanti', message: 'Il nome della struttura è obbligatorio.', onConfirm: () => setModalState({isOpen: false}), onCancel: null, confirmText: 'OK' });
+            return; 
+        }
         try {
             const path = `users/${user.uid}/structures`;
             if (structureData.id) {
@@ -454,59 +498,77 @@ const App = () => {
             handleCloseStructureModal();
         } catch (error) { console.error("Error saving structure:", error); }
     };
+
     const handleDeleteStructure = async (id) => {
-        if (!user || !db || !window.confirm("Sei sicuro di voler eliminare questa struttura? Verrà rimossa da tutti i medici associati.")) return;
-        try {
-            const path = `users/${user.uid}/structures`;
-            const doctorsPath = `users/${user.uid}/doctors`;
-            const batch = writeBatch(db);
-            const doctorsToUpdate = doctors.filter(d => d.structureIds?.includes(id));
-            doctorsToUpdate.forEach(d => {
-                const newIds = d.structureIds.filter(sid => sid !== id);
-                batch.update(doc(db, doctorsPath, d.id), { structureIds: newIds });
-            });
-            await batch.commit();
-            await deleteDoc(doc(db, path, id));
-        } catch (error) { console.error(error); }
+        if (!user || !db) return;
+        const confirmDelete = async () => {
+             try {
+                const path = `users/${user.uid}/structures`;
+                const doctorsPath = `users/${user.uid}/doctors`;
+                const batch = writeBatch(db);
+                const doctorsToUpdate = doctors.filter(d => d.structureIds?.includes(id));
+                doctorsToUpdate.forEach(d => {
+                    const newIds = d.structureIds.filter(sid => sid !== id);
+                    batch.update(doc(db, doctorsPath, d.id), { structureIds: newIds });
+                });
+                await batch.commit();
+                await deleteDoc(doc(db, path, id));
+            } catch (error) { console.error(error); }
+            finally { setModalState({ isOpen: false }); }
+        };
+        
+        setModalState({ isOpen: true, title: 'Conferma Eliminazione', message: 'Sei sicuro di voler eliminare questa struttura? Verrà rimossa da tutti i medici associati.', onConfirm: confirmDelete, onCancel: () => setModalState({isOpen: false}) });
     };
 
     // --- FUNZIONI IMPORT/EXPORT ---
-    const handleExport = () => { const link = document.createElement("a"); link.href = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ doctors, structures }, null, 2))}`; link.download = "gestionale_medici_backup.json"; link.click(); };
+    const handleExport = () => { 
+        const link = document.createElement("a"); 
+        link.href = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ doctors, structures }, null, 2))}`; 
+        link.download = "gestionale_medici_backup.json"; 
+        link.click(); 
+    };
+
     const handleImport = async (event) => {
-        if (!user || !db || !window.confirm("Sei sicuro? L'importazione sovrascriverà tutti i dati attuali.")) return;
         const file = event.target.files[0];
         if (!file) return;
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-            try {
-                const data = JSON.parse(e.target.result);
-                if (!data.doctors || !data.structures) throw new Error("File format invalid");
-                setIsLoading(true);
-                const batch = writeBatch(db);
-                const doctorsPath = collection(db, 'users', user.uid, 'doctors');
-                const structuresPath = collection(db, 'users', user.uid, 'structures');
-                const existingDocs = await getDocs(doctorsPath);
-                existingDocs.forEach(d => batch.delete(d.ref));
-                const existingStructs = await getDocs(structuresPath);
-                existingStructs.forEach(s => batch.delete(s.ref));
-                data.structures.forEach(s => {
-                    const { id, ...structData } = s;
-                    batch.set(doc(structuresPath, id || undefined), structData);
-                });
-                data.doctors.forEach(d => {
-                    const { id, ...docData } = d;
-                    batch.set(doc(doctorsPath), { notes: '', lastVisit: '', appointmentDate: '', ...docData });
-                });
-                await batch.commit();
-            } catch (err) {
-                console.error(err);
-                alert("Errore durante l'importazione: " + err.message);
-            } finally {
-                setIsLoading(false);
-                event.target.value = null;
-            }
+
+        const confirmImport = () => {
+            setModalState({isOpen: false});
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (!data.doctors || !data.structures) throw new Error("File format invalid");
+                    setIsLoading(true);
+                    const batch = writeBatch(db);
+                    const doctorsPath = collection(db, 'users', user.uid, 'doctors');
+                    const structuresPath = collection(db, 'users', user.uid, 'structures');
+                    const existingDocs = await getDocs(doctorsPath);
+                    existingDocs.forEach(d => batch.delete(d.ref));
+                    const existingStructs = await getDocs(structuresPath);
+                    existingStructs.forEach(s => batch.delete(s.ref));
+                    data.structures.forEach(s => {
+                        const { id, ...structData } = s;
+                        batch.set(doc(structuresPath, id || undefined), structData);
+                    });
+                    data.doctors.forEach(d => {
+                        const { id, ...docData } = d;
+                        batch.set(doc(doctorsPath), { notes: '', lastVisit: '', appointmentDate: '', ...docData });
+                    });
+                    await batch.commit();
+                } catch (err) {
+                    console.error(err);
+                    setModalState({ isOpen: true, title: 'Errore Importazione', message: 'Il formato del file non è valido o si è verificato un errore: ' + err.message, onConfirm: () => setModalState({isOpen: false}), onCancel: null, confirmText: 'OK' });
+                } finally {
+                    setIsLoading(false);
+                    event.target.value = null;
+                }
+            };
+            reader.readAsText(file);
         };
-        reader.readAsText(file);
+        
+        if (!user || !db) return;
+        setModalState({isOpen: true, title: 'Conferma Importazione', message: "Sei sicuro? L'importazione sovrascriverà tutti i dati attuali.", onConfirm: confirmImport, onCancel: () => { event.target.value = null; setModalState({isOpen: false}); } });
     };
 
     if (isLoading) return <div className="flex items-center justify-center h-screen bg-gray-900 text-white">Caricamento...</div>;
@@ -515,6 +577,15 @@ const App = () => {
 
     return (
         <div className="bg-gray-900 text-white min-h-screen font-sans p-4 sm:p-6 md:p-8">
+            <ConfirmationModal 
+                isOpen={modalState.isOpen}
+                title={modalState.title}
+                message={modalState.message}
+                onConfirm={modalState.onConfirm}
+                onCancel={modalState.onCancel}
+                confirmText={modalState.confirmText}
+                cancelText={modalState.cancelText}
+            />
             <div className="max-w-7xl mx-auto">
                 <header className="mb-8">
                     <div className="flex justify-between items-start flex-wrap gap-4">
@@ -579,4 +650,3 @@ const App = () => {
 };
 
 export default App;
-

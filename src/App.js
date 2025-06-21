@@ -30,6 +30,7 @@ const firebaseConfig = {
     appId: process.env.REACT_APP_FIREBASE_APP_ID
 };
 
+
 // --- COMPONENTE AUTENTICAZIONE ---
 const AuthPage = ({ onLogin, onRegister, setAuthError, authError }) => {
     const [email, setEmail] = useState('');
@@ -309,22 +310,18 @@ const App = () => {
         }
     }, []);
 
-    // --- FETCH DATI SPECIFICI DELL'UTENTE ---
+    // --- FETCH DATI SPECIFICI DELL'UTENTE (CORRETTO) ---
     useEffect(() => {
         if (!user || !db) {
             setDoctors([]);
             setStructures([]);
             return;
         }
-        
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const doctorsPath = `users/${user.uid}/doctors`; // O `artifacts/${appId}/public/data/doctors` per dati pubblici
-        const structuresPath = `users/${user.uid}/structures`; // O `artifacts/${appId}/public/data/structures`
 
-        const doctorsQuery = collection(db, doctorsPath);
+        const doctorsQuery = collection(db, 'users', user.uid, 'doctors');
         const unsubDoctors = onSnapshot(doctorsQuery, snap => setDoctors(snap.docs.map(d => ({ id: d.id, ...d.data() }))), err => console.error("Errore fetch medici:", err));
 
-        const structuresQuery = collection(db, structuresPath);
+        const structuresQuery = collection(db, 'users', user.uid, 'structures');
         const unsubStructures = onSnapshot(structuresQuery, snap => setStructures(snap.docs.map(s => ({ id: s.id, ...s.data() }))), err => console.error("Errore fetch strutture:", err));
 
         return () => {
@@ -582,3 +579,4 @@ const App = () => {
 };
 
 export default App;
+

@@ -30,8 +30,6 @@ const firebaseConfig = {
     appId: process.env.REACT_APP_FIREBASE_APP_ID
 };
 
-
-
 // --- COMPONENTE AUTENTICAZIONE ---
 const AuthPage = ({ onLogin, onRegister, setAuthError, authError }) => {
     const [email, setEmail] = useState('');
@@ -93,7 +91,8 @@ const TableView = ({ doctors, structures, alertDays, onDoctorDoubleClick, onSetT
     const daysOfWeek = ['lunedi', 'martedi', 'mercoledi', 'giovedi', 'venerdi', 'sabato', 'domenica'];
 
     const getVisitAlert = (lastVisitDate) => {
-        if (!lastVisitDate) return null;
+        if (!lastVisitDate) return <div className="w-4 h-4 bg-gray-600 rounded-full flex-shrink-0" title="Nessuna data di visita"></div>;
+        
         const today = new Date();
         const visitDate = new Date(lastVisitDate);
         today.setHours(0, 0, 0, 0);
@@ -101,9 +100,14 @@ const TableView = ({ doctors, structures, alertDays, onDoctorDoubleClick, onSetT
         const diffTime = today - visitDate;
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
+        if (diffDays <= 0) { // Visita oggi o nel futuro
+            return <div className="w-4 h-4 bg-green-500 rounded-full flex-shrink-0" title={`Ultima visita registrata per oggi o per il futuro`}></div>;
+        }
         if (diffDays > alertDays.red) return <div className="w-4 h-4 bg-red-500 rounded-full flex-shrink-0" title={`Ultima visita ${diffDays} giorni fa`}></div>;
         if (diffDays > alertDays.yellow) return <div className="w-4 h-4 bg-yellow-400 rounded-full flex-shrink-0" title={`Ultima visita ${diffDays} giorni fa`}></div>;
-        return <div className="w-4 h-4"></div>;
+        
+        // Altrimenti è verde
+        return <div className="w-4 h-4 bg-green-500 rounded-full flex-shrink-0" title={`Ultima visita ${diffDays} giorni fa`}></div>;
     };
 
     const getShiftAndStructure = (timeString, structureIds) => {
@@ -135,34 +139,33 @@ const TableView = ({ doctors, structures, alertDays, onDoctorDoubleClick, onSetT
                             <th scope="col" className="px-6 py-3 rounded-l-lg w-1/5">Medico</th>
                             <th scope="col" className="px-4 py-3 text-center">Ultima Visita</th>
                             <th scope="col" className="px-4 py-3 text-center">Appuntamento</th>
-                            {daysOfWeek.map(day => <th scope="col" key={day} className="px-4 py-3 text-center capitalize">{day}</th>)}
-                            <th scope="col" className="px-4 py-3 text-center rounded-r-lg">Azione</th>
+                            {daysOfWeek.map((day, idx) => <th scope="col" key={day} className={`px-4 py-3 text-center capitalize ${idx === daysOfWeek.length - 1 ? 'rounded-r-lg' : ''}`}>{day}</th>)}
                         </tr>
                     </thead>
                     <tbody>
                         {doctors.map(doctor => (
-                            <tr key={doctor.id} onDoubleClick={() => onDoctorDoubleClick(doctor)} className="bg-gray-800 border-b border-gray-700 hover:bg-gray-700/50 transition-colors cursor-pointer">
+                            <tr key={doctor.id} onDoubleClick={() => onDoctorDoubleClick(doctor)} className="bg-gray-800 border-b border-gray-700 hover:bg-gray-700/50 transition-colors cursor-pointer group">
                                 <td className="px-6 py-4 font-medium text-white whitespace-nowrap">
-                                    <div className="flex items-center gap-3">
-                                        {getVisitAlert(doctor.lastVisit)}
-                                        <span>{doctor.firstName} {doctor.lastName}</span>
+                                    <div className="flex items-center justify-between gap-3">
+                                        <div className="flex items-center gap-3">
+                                            {getVisitAlert(doctor.lastVisit)}
+                                            <span>{doctor.firstName} {doctor.lastName}</span>
+                                        </div>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onSetTodayAsLastVisit(doctor.id);
+                                            }}
+                                            className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-1 px-2 rounded-lg flex items-center gap-1.5 transition-all opacity-0 group-hover:opacity-100 focus:opacity-100"
+                                            title="Imposta data visita a oggi"
+                                        >
+                                            <CalendarPlus size={16} />
+                                        </button>
                                     </div>
                                 </td>
                                 <td className="px-4 py-4 text-center">{doctor.lastVisit ? new Date(doctor.lastVisit).toLocaleDateString('it-IT') : 'N/D'}</td>
                                 <td className="px-4 py-4 text-center">{doctor.appointmentDate ? new Date(doctor.appointmentDate).toLocaleDateString('it-IT') : 'N/D'}</td>
                                 {daysOfWeek.map(day => <td key={day} className="px-4 py-4 text-center align-top h-16">{getShiftAndStructure(doctor.availability?.[day], doctor.structureIds)}</td>)}
-                                <td className="px-4 py-4 text-center">
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation(); // Previene il trigger del onDoubleClick della riga
-                                            onSetTodayAsLastVisit(doctor.id);
-                                        }}
-                                        className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-2 px-3 rounded-lg flex items-center gap-2 transition-colors"
-                                        title="Imposta data visita a oggi"
-                                    >
-                                        <CalendarPlus size={18} />
-                                    </button>
-                                </td>
                             </tr>
                         ))}
                     </tbody>
@@ -171,6 +174,7 @@ const TableView = ({ doctors, structures, alertDays, onDoctorDoubleClick, onSetT
         </div>
     );
 };
+
 
 // --- MODALE PER AGGIUNGERE/MODIFICARE MEDICO ---
 const DoctorModal = ({ isOpen, onClose, onSave, onDelete, structures, initialData, onSetTodayAsLastVisit }) => {
@@ -221,7 +225,7 @@ const DoctorModal = ({ isOpen, onClose, onSave, onDelete, structures, initialDat
                     <div><h3 className="text-lg font-semibold my-2">Ultima Visita (doppio click per oggi)</h3><input name="lastVisit" type="date" value={doctorData.lastVisit} onChange={handleChange} onDoubleClick={handleDateDoubleClick} className="w-full bg-gray-700 p-3 rounded-lg" /></div>
                     <div><h3 className="text-lg font-semibold my-2">Data Appuntamento</h3><input name="appointmentDate" type="date" value={doctorData.appointmentDate} onChange={handleChange} className="w-full bg-gray-700 p-3 rounded-lg" /></div>
                     <div><h3 className="text-lg font-semibold my-2">Note</h3><textarea name="notes" placeholder="Note aggiuntive..." value={doctorData.notes} onChange={handleChange} className="w-full bg-gray-700 p-3 rounded-lg" rows="3"></textarea></div>
-                    <div><h3 className="text-lg font-semibold mb-2 flex items-center gap-2"><Clock size={20}/> Orari</h3><div className="grid sm:grid-cols-2 gap-4">{Object.keys(doctorData.availability).map(day => (<div key={day}><label className="capitalize text-gray-400">{day}</label><input type="text" placeholder="Es. 9-12" value={doctorData.availability[day]} onChange={(e) => handleAvailabilityChange(day, e.target.value)} className="w-full mt-1 bg-gray-700 p-2 rounded-lg" /></div>))}</div></div>
+                    <div><h3 className="text-lg font-semibold mb-2 flex items-center gap-2"><Clock size={20}/> Orari</h3><div className="grid sm:grid-cols-2 gap-4">{Object.keys(doctorData.availability).map(day => (<div key={day}><label className="capitalize text-gray-400">{day}</label><input type="text" placeholder="Es. 9-12 / 15-18" value={doctorData.availability[day]} onChange={(e) => handleAvailabilityChange(day, e.target.value)} className="w-full mt-1 bg-gray-700 p-2 rounded-lg" /></div>))}</div></div>
                     <div className="flex justify-between items-center gap-4 pt-4">
                          <div>{isEditMode && <button type="button" onClick={handleDeleteClick} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2"><Trash2 size={18} /> Elimina</button>}</div>
                         <div className="flex gap-4"><button type="button" onClick={onClose} className="bg-gray-600 font-bold py-2 px-4 rounded-lg">Annulla</button><button type="submit" className="bg-cyan-500 font-bold py-2 px-4 rounded-lg flex items-center gap-2"><Save size={18}/> Salva</button></div>
@@ -312,11 +316,15 @@ const App = () => {
             setStructures([]);
             return;
         }
+        
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const doctorsPath = `users/${user.uid}/doctors`; // O `artifacts/${appId}/public/data/doctors` per dati pubblici
+        const structuresPath = `users/${user.uid}/structures`; // O `artifacts/${appId}/public/data/structures`
 
-        const doctorsQuery = collection(db, 'users', user.uid, 'doctors');
+        const doctorsQuery = collection(db, doctorsPath);
         const unsubDoctors = onSnapshot(doctorsQuery, snap => setDoctors(snap.docs.map(d => ({ id: d.id, ...d.data() }))), err => console.error("Errore fetch medici:", err));
 
-        const structuresQuery = collection(db, 'users', user.uid, 'structures');
+        const structuresQuery = collection(db, structuresPath);
         const unsubStructures = onSnapshot(structuresQuery, snap => setStructures(snap.docs.map(s => ({ id: s.id, ...s.data() }))), err => console.error("Errore fetch strutture:", err));
 
         return () => {
@@ -429,7 +437,7 @@ const App = () => {
         } catch (error) { console.error("Error saving doctor", error); }
     };
     const handleDeleteDoctor = async (id) => {
-        if (!user || !db) return;
+        if (!user || !db || !window.confirm("Sei sicuro di voler eliminare questo medico?")) return;
         try {
             await deleteDoc(doc(db, `users/${user.uid}/doctors`, id));
             handleCloseDoctorModal();
@@ -450,7 +458,7 @@ const App = () => {
         } catch (error) { console.error("Error saving structure:", error); }
     };
     const handleDeleteStructure = async (id) => {
-        if (!user || !db) return;
+        if (!user || !db || !window.confirm("Sei sicuro di voler eliminare questa struttura? Verrà rimossa da tutti i medici associati.")) return;
         try {
             const path = `users/${user.uid}/structures`;
             const doctorsPath = `users/${user.uid}/doctors`;
@@ -468,7 +476,7 @@ const App = () => {
     // --- FUNZIONI IMPORT/EXPORT ---
     const handleExport = () => { const link = document.createElement("a"); link.href = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ doctors, structures }, null, 2))}`; link.download = "gestionale_medici_backup.json"; link.click(); };
     const handleImport = async (event) => {
-        if (!user || !db) return;
+        if (!user || !db || !window.confirm("Sei sicuro? L'importazione sovrascriverà tutti i dati attuali.")) return;
         const file = event.target.files[0];
         if (!file) return;
         const reader = new FileReader();
@@ -495,6 +503,7 @@ const App = () => {
                 await batch.commit();
             } catch (err) {
                 console.error(err);
+                alert("Errore durante l'importazione: " + err.message);
             } finally {
                 setIsLoading(false);
                 event.target.value = null;

@@ -1,21 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { initializeApp } from 'firebase/app';
-import { 
-    getAuth, 
-    createUserWithEmailAndPassword, 
-    signInWithEmailAndPassword, 
-    signOut, 
-    onAuthStateChanged 
+import {
+    getAuth,
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged
 } from 'firebase/auth';
-import { 
-    getFirestore, 
-    collection, 
-    doc, 
-    addDoc, 
-    setDoc, 
-    deleteDoc, 
-    onSnapshot, 
-    getDocs, 
+import {
+    getFirestore,
+    collection,
+    doc,
+    addDoc,
+    setDoc,
+    deleteDoc,
+    onSnapshot,
+    getDocs,
     writeBatch
 } from 'firebase/firestore';
 import { Plus, Trash2, Building, UserPlus, Save, X, Clock, Sun, Moon, Upload, Download, AlertCircle, Filter, Edit, Search, ChevronDown, LogOut, CalendarPlus } from 'lucide-react';
@@ -29,6 +29,7 @@ const firebaseConfig = {
     messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
     appId: process.env.REACT_APP_FIREBASE_APP_ID
 };
+
 
 
 // --- COMPONENTE AUTENTICAZIONE ---
@@ -54,18 +55,18 @@ const AuthPage = ({ onLogin, onRegister, setAuthError, authError }) => {
                     {isLogin ? 'Accedi al Gestionale' : 'Registra un Nuovo Account'}
                 </h2>
                 <form onSubmit={handleSubmit} className="space-y-6">
-                    <input 
-                        type="email" 
+                    <input
+                        type="email"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         placeholder="Indirizzo Email"
                         required
                         className="w-full px-4 py-2 text-white bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500"
                     />
-                    <input 
+                    <input
                         type="password"
                         value={password}
-                        onChange={(e) => setPassword(e.target.value)} 
+                        onChange={(e) => setPassword(e.target.value)}
                         placeholder="Password"
                         required
                         className="w-full px-4 py-2 text-white bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500"
@@ -88,7 +89,7 @@ const AuthPage = ({ onLogin, onRegister, setAuthError, authError }) => {
 
 
 // --- COMPONENTE VISTA TABELLARE ---
-const TableView = ({ doctors, structures, alertDays, onDoctorDoubleClick }) => {
+const TableView = ({ doctors, structures, alertDays, onDoctorDoubleClick, onSetTodayAsLastVisit }) => {
     const daysOfWeek = ['lunedi', 'martedi', 'mercoledi', 'giovedi', 'venerdi', 'sabato', 'domenica'];
 
     const getVisitAlert = (lastVisitDate) => {
@@ -104,7 +105,7 @@ const TableView = ({ doctors, structures, alertDays, onDoctorDoubleClick }) => {
         if (diffDays > alertDays.yellow) return <div className="w-4 h-4 bg-yellow-400 rounded-full flex-shrink-0" title={`Ultima visita ${diffDays} giorni fa`}></div>;
         return <div className="w-4 h-4"></div>;
     };
-    
+
     const getShiftAndStructure = (timeString, structureIds) => {
         if (!timeString || !timeString.trim()) return null;
         const slots = timeString.split('/').map(s => s.trim());
@@ -128,14 +129,14 @@ const TableView = ({ doctors, structures, alertDays, onDoctorDoubleClick }) => {
     return (
         <div className="bg-gray-800 p-4 sm:p-6 rounded-xl shadow-lg">
             <div className="overflow-x-auto">
-                 <table className="w-full min-w-[1100px] text-left text-sm text-gray-300">
+                 <table className="w-full min-w-[1200px] text-left text-sm text-gray-300">
                     <thead className="bg-gray-700 text-xs text-gray-400 uppercase tracking-wider">
                         <tr>
                             <th scope="col" className="px-6 py-3 rounded-l-lg w-1/5">Medico</th>
                             <th scope="col" className="px-4 py-3 text-center">Ultima Visita</th>
                             <th scope="col" className="px-4 py-3 text-center">Appuntamento</th>
                             {daysOfWeek.map(day => <th scope="col" key={day} className="px-4 py-3 text-center capitalize">{day}</th>)}
-                             <th scope="col" className="px-1 py-3 rounded-r-lg"></th>
+                            <th scope="col" className="px-4 py-3 text-center rounded-r-lg">Azione</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -150,7 +151,18 @@ const TableView = ({ doctors, structures, alertDays, onDoctorDoubleClick }) => {
                                 <td className="px-4 py-4 text-center">{doctor.lastVisit ? new Date(doctor.lastVisit).toLocaleDateString('it-IT') : 'N/D'}</td>
                                 <td className="px-4 py-4 text-center">{doctor.appointmentDate ? new Date(doctor.appointmentDate).toLocaleDateString('it-IT') : 'N/D'}</td>
                                 {daysOfWeek.map(day => <td key={day} className="px-4 py-4 text-center align-top h-16">{getShiftAndStructure(doctor.availability?.[day], doctor.structureIds)}</td>)}
-                                <td></td>
+                                <td className="px-4 py-4 text-center">
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation(); // Previene il trigger del onDoubleClick della riga
+                                            onSetTodayAsLastVisit(doctor.id);
+                                        }}
+                                        className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-2 px-3 rounded-lg flex items-center gap-2 transition-colors"
+                                        title="Imposta data visita a oggi"
+                                    >
+                                        <CalendarPlus size={18} />
+                                    </button>
+                                </td>
                             </tr>
                         ))}
                     </tbody>
@@ -161,7 +173,7 @@ const TableView = ({ doctors, structures, alertDays, onDoctorDoubleClick }) => {
 };
 
 // --- MODALE PER AGGIUNGERE/MODIFICARE MEDICO ---
-const DoctorModal = ({ isOpen, onClose, onSave, onDelete, structures, initialData }) => {
+const DoctorModal = ({ isOpen, onClose, onSave, onDelete, structures, initialData, onSetTodayAsLastVisit }) => {
     const getInitialState = useCallback(() => initialData || { firstName: '', lastName: '', dateOfBirth: '', structureIds: [], availability: { lunedi: '', martedi: '', mercoledi: '', giovedi: '', venerdi: '', sabato: '', domenica: '' }, notes: '', lastVisit: '', appointmentDate: '' }, [initialData]);
     const [doctorData, setDoctorData] = useState(getInitialState());
     const isEditMode = initialData && initialData.id;
@@ -174,11 +186,34 @@ const DoctorModal = ({ isOpen, onClose, onSave, onDelete, structures, initialDat
     const handleSubmit = (e) => { e.preventDefault(); onSave(doctorData); };
     const handleDateDoubleClick = () => setDoctorData(p => ({ ...p, lastVisit: new Date().toISOString().split('T')[0] }));
     const handleDeleteClick = () => { if (doctorData?.id) onDelete(doctorData.id); };
+    
+    const handleSetVisitTodayClick = () => {
+        if (doctorData?.id) {
+            onSetTodayAsLastVisit(doctorData.id);
+            // Aggiorna lo stato locale per un feedback immediato
+            setDoctorData(p => ({ ...p, lastVisit: new Date().toISOString().split('T')[0] }));
+        }
+    };
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
             <div className="bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-                <div className="flex justify-between items-center mb-4"><h2 className="text-2xl font-bold text-cyan-400">{isEditMode ? 'Modifica Medico' : 'Nuovo Medico'}</h2><button onClick={onClose} className="text-gray-400 hover:text-white"><X size={28}/></button></div>
+                <div className="flex justify-between items-center mb-4">
+                    <h2 className="text-2xl font-bold text-cyan-400">{isEditMode ? 'Modifica Medico' : 'Nuovo Medico'}</h2>
+                    <div className="flex items-center gap-2">
+                        {isEditMode && (
+                            <button
+                                type="button"
+                                onClick={handleSetVisitTodayClick}
+                                className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2 transition-colors"
+                                title="Imposta data visita a oggi"
+                            >
+                                <CalendarPlus size={18} /> Visita Oggi
+                            </button>
+                        )}
+                        <button onClick={onClose} className="text-gray-400 hover:text-white"><X size={28}/></button>
+                    </div>
+                </div>
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="grid md:grid-cols-2 gap-4"><input name="firstName" placeholder="Nome (es. Dott.)" value={doctorData.firstName} onChange={handleChange} className="bg-gray-700 p-3 rounded-lg" /><input name="lastName" placeholder="Cognome" value={doctorData.lastName} onChange={handleChange} className="bg-gray-700 p-3 rounded-lg" /></div>
                     <input name="dateOfBirth" type="date" value={doctorData.dateOfBirth} onChange={handleChange} className="w-full bg-gray-700 p-3 rounded-lg" />
@@ -241,14 +276,14 @@ const App = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [dayFilter, setDayFilter] = useState('');
     const [structureFilter, setStructureFilter] = useState([]);
-    
+
     // --- STATI MODALI E DROPDOWN ---
     const [isDoctorModalOpen, setIsDoctorModalOpen] = useState(false);
     const [selectedDoctor, setSelectedDoctor] = useState(null);
     const [isStructureModalOpen, setIsStructureModalOpen] = useState(false);
     const [selectedStructure, setSelectedStructure] = useState(null);
     const [isStructureDropdownOpen, setIsStructureDropdownOpen] = useState(false);
-    
+
     // --- INIZIALIZZAZIONE FIREBASE E AUTH ---
     useEffect(() => {
         try {
@@ -307,11 +342,11 @@ const App = () => {
     // --- LOGICA DI FILTRAGGIO E ORDINAMENTO ---
     const processedDoctors = React.useMemo(() => {
         let items = [...doctors];
-        
+
         if (searchQuery) items = items.filter(doctor => `${doctor.firstName} ${doctor.lastName}`.toLowerCase().includes(searchQuery.toLowerCase()));
         if (dayFilter) items = items.filter(doctor => doctor.availability && doctor.availability[dayFilter] && doctor.availability[dayFilter].trim() !== '');
         if (structureFilter.length > 0) items = items.filter(doctor => doctor.structureIds && doctor.structureIds.some(id => structureFilter.includes(id)));
-        
+
         if (filterUpcoming) {
             items = items.filter(doctor => {
                 if (!doctor.appointmentDate) return false;
@@ -324,7 +359,7 @@ const App = () => {
                 return appointmentDate >= today && appointmentDate <= sevenDaysFromNow;
             });
         }
-        
+
         if (filterAlertsOnly) {
             items = items.filter(doctor => {
                 if (!doctor.lastVisit) return false;
@@ -368,6 +403,17 @@ const App = () => {
     const handleCloseStructureModal = () => setIsStructureModalOpen(false);
 
     // --- FUNZIONI CRUD ---
+    const handleSetTodayAsLastVisit = async (doctorId) => {
+        if (!user || !db) return;
+        try {
+            const today = new Date().toISOString().split('T')[0]; // Formato YYYY-MM-DD
+            const doctorRef = doc(db, `users/${user.uid}/doctors`, doctorId);
+            await setDoc(doctorRef, { lastVisit: today }, { merge: true });
+        } catch (error) {
+            console.error("Errore nell'aggiornare la data dell'ultima visita:", error);
+        }
+    };
+
     const handleSaveDoctor = async (doctorData) => {
         if (!user || !db) return;
         if (!doctorData.firstName?.trim() || !doctorData.lastName?.trim()) { alert("Nome e cognome sono obbligatori."); return; }
@@ -458,7 +504,7 @@ const App = () => {
     };
 
     if (isLoading) return <div className="flex items-center justify-center h-screen bg-gray-900 text-white">Caricamento...</div>;
-    
+
     if (!user) return <AuthPage onLogin={handleLogin} onRegister={handleRegister} setAuthError={setAuthError} authError={authError} />;
 
     return (
@@ -480,7 +526,7 @@ const App = () => {
                 </header>
 
                 <div className="flex border-b border-gray-700 mb-6"><button onClick={() => setActiveTab('medici')} className={`py-2 px-4 text-lg font-medium ${activeTab === 'medici' ? 'border-b-2 border-cyan-400 text-cyan-400' : 'text-gray-400 hover:text-white'}`}>Riepilogo Medici</button><button onClick={() => setActiveTab('strutture')} className={`py-2 px-4 text-lg font-medium ${activeTab === 'strutture' ? 'border-b-2 border-cyan-400 text-cyan-400' : 'text-gray-400 hover:text-white'}`}>Gestione Strutture</button></div>
-                
+
                 <main>
                     {activeTab === 'medici' && (
                         <>
@@ -492,24 +538,24 @@ const App = () => {
                                 </div>
                             </div>
                             <div className="flex flex-wrap items-center justify-center gap-4 text-sm mb-6 bg-gray-800/50 p-4 rounded-lg">
-                                    <div className="flex items-center gap-2"><span className="font-semibold">Ordina per:</span><button onClick={() => requestSort('lastName')} className={`px-3 py-1 rounded-full ${sortConfig.key === 'lastName' ? 'bg-cyan-600' : 'bg-gray-700'}`}>Nome</button><button onClick={() => requestSort('lastVisit')} className={`px-3 py-1 rounded-full ${sortConfig.key === 'lastVisit' ? 'bg-cyan-600' : 'bg-gray-700'}`}>Ultima Visita</button></div>
-                                    <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={filterAlertsOnly} onChange={() => setFilterAlertsOnly(!filterAlertsOnly)} className="form-checkbox h-5 w-5 text-cyan-500 bg-gray-900 border-gray-600 rounded focus:ring-cyan-600"/><span className="flex items-center gap-1"><Filter size={14}/> Solo con alert</span></label>
-                                    <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={filterUpcoming} onChange={() => setFilterUpcoming(!filterUpcoming)} className="form-checkbox h-5 w-5 text-cyan-500 bg-gray-900 border-gray-600 rounded focus:ring-cyan-600"/><span className="flex items-center gap-1"><CalendarPlus size={14}/> App. prossimi 7 gg</span></label>
-                                    <div className="flex items-center gap-2"><label className="font-semibold" htmlFor="day-filter">Giorno:</label><select id="day-filter" value={dayFilter} onChange={(e) => setDayFilter(e.target.value)} className="bg-gray-700 text-white p-2 rounded-md"><option value="">Qualsiasi</option><option value="lunedi">Lunedì</option><option value="martedi">Martedì</option><option value="mercoledi">Mercoledì</option><option value="giovedi">Giovedì</option><option value="venerdi">Venerdì</option><option value="sabato">Sabato</option><option value="domenica">Domenica</option></select></div>
-                                    <div className="relative"><button onClick={() => setIsStructureDropdownOpen(!isStructureDropdownOpen)} className="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded-md">Filtra per Struttura <ChevronDown size={16}/></button>
-                                        {isStructureDropdownOpen && (<div className="absolute top-full mt-2 w-56 bg-gray-600 rounded-md shadow-lg z-10 p-2">
-                                            <button onClick={() => setStructureFilter([])} className="w-full text-left p-1.5 rounded-md hover:bg-gray-500 font-semibold mb-1">Tutte le strutture</button>
-                                            <hr className="border-gray-500 mb-1"/>
-                                            {structures.map(s => (<label key={s.id} className="flex items-center gap-2 p-1.5 rounded-md hover:bg-gray-500 cursor-pointer"><input type="checkbox" checked={structureFilter.includes(s.id)} onChange={() => handleStructureFilterChange(s.id)} className="form-checkbox h-4 w-4 text-cyan-500"/>{s.name}</label>))}
-                                        </div>)}
-                                    </div>
+                                 <div className="flex items-center gap-2"><span className="font-semibold">Ordina per:</span><button onClick={() => requestSort('lastName')} className={`px-3 py-1 rounded-full ${sortConfig.key === 'lastName' ? 'bg-cyan-600' : 'bg-gray-700'}`}>Nome</button><button onClick={() => requestSort('lastVisit')} className={`px-3 py-1 rounded-full ${sortConfig.key === 'lastVisit' ? 'bg-cyan-600' : 'bg-gray-700'}`}>Ultima Visita</button></div>
+                                 <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={filterAlertsOnly} onChange={() => setFilterAlertsOnly(!filterAlertsOnly)} className="form-checkbox h-5 w-5 text-cyan-500 bg-gray-900 border-gray-600 rounded focus:ring-cyan-600"/><span className="flex items-center gap-1"><Filter size={14}/> Solo con alert</span></label>
+                                 <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={filterUpcoming} onChange={() => setFilterUpcoming(!filterUpcoming)} className="form-checkbox h-5 w-5 text-cyan-500 bg-gray-900 border-gray-600 rounded focus:ring-cyan-600"/><span className="flex items-center gap-1"><CalendarPlus size={14}/> App. prossimi 7 gg</span></label>
+                                 <div className="flex items-center gap-2"><label className="font-semibold" htmlFor="day-filter">Giorno:</label><select id="day-filter" value={dayFilter} onChange={(e) => setDayFilter(e.target.value)} className="bg-gray-700 text-white p-2 rounded-md"><option value="">Qualsiasi</option><option value="lunedi">Lunedì</option><option value="martedi">Martedì</option><option value="mercoledi">Mercoledì</option><option value="giovedi">Giovedì</option><option value="venerdi">Venerdì</option><option value="sabato">Sabato</option><option value="domenica">Domenica</option></select></div>
+                                 <div className="relative"><button onClick={() => setIsStructureDropdownOpen(!isStructureDropdownOpen)} className="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded-md">Filtra per Struttura <ChevronDown size={16}/></button>
+                                    {isStructureDropdownOpen && (<div className="absolute top-full mt-2 w-56 bg-gray-600 rounded-md shadow-lg z-10 p-2">
+                                        <button onClick={() => setStructureFilter([])} className="w-full text-left p-1.5 rounded-md hover:bg-gray-500 font-semibold mb-1">Tutte le strutture</button>
+                                        <hr className="border-gray-500 mb-1"/>
+                                        {structures.map(s => (<label key={s.id} className="flex items-center gap-2 p-1.5 rounded-md hover:bg-gray-500 cursor-pointer"><input type="checkbox" checked={structureFilter.includes(s.id)} onChange={() => handleStructureFilterChange(s.id)} className="form-checkbox h-4 w-4 text-cyan-500"/>{s.name}</label>))}
+                                    </div>)}
+                                </div>
                             </div>
                              <div className="bg-gray-800/50 p-4 rounded-lg mb-6 flex items-center justify-center flex-wrap gap-x-6 gap-y-3">
                                 <h3 className="text-lg font-semibold text-cyan-400 flex items-center gap-2"><AlertCircle size={20} /> Impostazioni Alert</h3>
                                 <div className="flex items-center gap-2"><label htmlFor="yellow-days" className="text-sm text-yellow-300">Giallo (giorni):</label><input type="number" id="yellow-days" value={alertDays.yellow} onChange={(e) => setAlertDays(p => ({ ...p, yellow: Number(e.target.value) || 0 }))} className="bg-gray-700 w-20 p-2 rounded-md"/></div>
                                 <div className="flex items-center gap-2"><label htmlFor="red-days" className="text-sm text-red-300">Rosso (giorni):</label><input type="number" id="red-days" value={alertDays.red} onChange={(e) => setAlertDays(p => ({ ...p, red: Number(e.target.value) || 0 }))} className="bg-gray-700 w-20 p-2 rounded-md"/></div>
                             </div>
-                            <TableView doctors={processedDoctors} structures={structures} alertDays={alertDays} onDoctorDoubleClick={handleOpenDoctorModal} />
+                            <TableView doctors={processedDoctors} structures={structures} alertDays={alertDays} onDoctorDoubleClick={handleOpenDoctorModal} onSetTodayAsLastVisit={handleSetTodayAsLastVisit} />
                         </>
                     )}
                     {activeTab === 'strutture' && (
@@ -520,7 +566,7 @@ const App = () => {
                     )}
                 </main>
             </div>
-            <DoctorModal isOpen={isDoctorModalOpen} onClose={handleCloseDoctorModal} onSave={handleSaveDoctor} onDelete={handleDeleteDoctor} structures={structures} initialData={selectedDoctor} />
+            <DoctorModal isOpen={isDoctorModalOpen} onClose={handleCloseDoctorModal} onSave={handleSaveDoctor} onDelete={handleDeleteDoctor} structures={structures} initialData={selectedDoctor} onSetTodayAsLastVisit={handleSetTodayAsLastVisit} />
             <StructureModal isOpen={isStructureModalOpen} onClose={handleCloseStructureModal} onSave={handleSaveStructure} initialData={selectedStructure} />
         </div>
     );

@@ -5,7 +5,9 @@ import {
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
     signOut,
-    onAuthStateChanged
+    onAuthStateChanged,
+    signInWithCustomToken,
+    signInAnonymously
 } from 'firebase/auth';
 import {
     getFirestore,

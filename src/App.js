@@ -2,10 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { initializeApp } from 'firebase/app';
 import {
     getAuth,
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
     signOut,
-    onAuthStateChanged,
-    signInWithCustomToken,
-    signInAnonymously
+    onAuthStateChanged
 } from 'firebase/auth';
 import {
     getFirestore,
@@ -20,15 +20,59 @@ import {
 } from 'firebase/firestore';
 import { Plus, Trash2, Building, UserPlus, Save, X, Clock, Sun, Moon, Upload, Download, AlertCircle, Filter, Edit, Search, ChevronDown, LogOut, CalendarPlus } from 'lucide-react';
 
+// --- COMPONENTE AUTENTICAZIONE ---
+const AuthPage = ({ onLogin, onRegister, setAuthError, authError }) => {
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [isLogin, setIsLogin] = useState(true);
 
-// --- CONFIGURAZIONE FIREBASE ---
-const firebaseConfig = {
-    apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
-    authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
-    projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
-    storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
-    appId: process.env.REACT_APP_FIREBASE_APP_ID
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        setAuthError('');
+        if (isLogin) {
+            onLogin(email, password);
+        } else {
+            onRegister(email, password);
+        }
+    };
+
+    return (
+        <div className="flex items-center justify-center min-h-screen bg-gray-900">
+            <div className="w-full max-w-md p-8 space-y-8 bg-gray-800 rounded-xl shadow-lg">
+                <h2 className="text-3xl font-bold text-center text-cyan-400">
+                    {isLogin ? 'Accedi al Gestionale' : 'Registra un Nuovo Account'}
+                </h2>
+                <form onSubmit={handleSubmit} className="space-y-6">
+                    <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="Indirizzo Email"
+                        required
+                        className="w-full px-4 py-2 text-white bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    />
+                    <input
+                        type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Password"
+                        required
+                        className="w-full px-4 py-2 text-white bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                    />
+                     {authError && <p className="text-red-400 text-sm">{authError}</p>}
+                    <button type="submit" className="w-full px-4 py-2 font-bold text-white bg-cyan-600 rounded-md hover:bg-cyan-700 transition-colors">
+                        {isLogin ? 'Accedi' : 'Registrati'}
+                    </button>
+                </form>
+                <p className="text-sm text-center text-gray-400">
+                    {isLogin ? "Non hai un account? " : "Hai già un account? "}
+                    <button onClick={() => { setIsLogin(!isLogin); setAuthError(''); }} className="font-medium text-cyan-400 hover:underline">
+                        {isLogin ? 'Registrati' : 'Accedi'}
+                    </button>
+                </p>
+            </div>
+        </div>
+    );
 };
 
 
@@ -274,44 +318,43 @@ const App = () => {
     const [isStructureDropdownOpen, setIsStructureDropdownOpen] = useState(false);
     const [modalState, setModalState] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {}, onCancel: null });
 
-    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-
     // --- INIZIALIZZAZIONE FIREBASE E AUTH ---
     useEffect(() => {
-        const initializeFirebase = async () => {
-            try {
-                if (typeof __firebase_config === 'undefined') {
-                    console.error("Configurazione Firebase non trovata.");
-                    setAuthError("Configurazione Firebase mancante. L'app non può funzionare.");
-                    setIsLoading(false);
-                    return;
-                }
-                const firebaseConfig = JSON.parse(__firebase_config);
-                const app = initializeApp(firebaseConfig);
-                const firestoreDb = getFirestore(app);
-                const firebaseAuth = getAuth(app);
-                setDb(firestoreDb);
-                setAuth(firebaseAuth);
-
-                onAuthStateChanged(firebaseAuth, (user) => {
-                    setUser(user);
-                    setIsLoading(false);
-                });
-
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(firebaseAuth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(firebaseAuth);
-                }
-
-            } catch (e) {
-                console.error("Errore di configurazione o autenticazione Firebase.", e);
-                setAuthError("Errore di configurazione o autenticazione. Controlla la console.");
-                setIsLoading(false);
+        try {
+            // This check is for environments where process is not defined.
+            // It falls back to checking for a global __firebase_config variable.
+            let firebaseConfig;
+            if (typeof process !== 'undefined' && process.env.REACT_APP_FIREBASE_API_KEY) {
+                 firebaseConfig = {
+                    apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+                    authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+                    projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+                    storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+                    messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+                    appId: process.env.REACT_APP_FIREBASE_APP_ID
+                };
+            } else if (typeof __firebase_config !== 'undefined') {
+                firebaseConfig = JSON.parse(__firebase_config);
+            } else {
+                 throw new Error("Configurazione Firebase non trovata.");
             }
-        };
 
-        initializeFirebase();
+            const app = initializeApp(firebaseConfig);
+            const firestoreDb = getFirestore(app);
+            const firebaseAuth = getAuth(app);
+            setDb(firestoreDb);
+            setAuth(firebaseAuth);
+
+            const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
+                setUser(user);
+                setIsLoading(false);
+            });
+            return () => unsubscribe();
+        } catch (e) {
+            console.error("Errore di configurazione Firebase.", e);
+            setAuthError(e.message);
+            setIsLoading(false);
+        }
     }, []);
 
 
@@ -323,19 +366,27 @@ const App = () => {
             return;
         }
 
-        const doctorsPath = collection(db, 'artifacts', appId, 'users', user.uid, 'doctors');
+        const doctorsPath = collection(db, 'users', user.uid, 'doctors');
         const unsubDoctors = onSnapshot(doctorsPath, snap => setDoctors(snap.docs.map(d => ({ id: d.id, ...d.data() }))), err => console.error("Errore fetch medici:", err));
 
-        const structuresPath = collection(db, 'artifacts', appId, 'users', user.uid, 'structures');
+        const structuresPath = collection(db, 'users', user.uid, 'structures');
         const unsubStructures = onSnapshot(structuresPath, snap => setStructures(snap.docs.map(s => ({ id: s.id, ...s.data() }))), err => console.error("Errore fetch strutture:", err));
 
         return () => {
             unsubDoctors();
             unsubStructures();
         };
-    }, [user, db, appId]);
+    }, [user, db]);
 
     // --- FUNZIONI DI AUTENTICAZIONE ---
+    const handleRegister = (email, password) => {
+        if (!auth) return;
+        createUserWithEmailAndPassword(auth, email, password).catch(error => setAuthError(error.message));
+    };
+    const handleLogin = (email, password) => {
+        if (!auth) return;
+        signInWithEmailAndPassword(auth, email, password).catch(error => setAuthError(error.message));
+    };
     const handleLogout = () => {
         if (!auth) return;
         signOut(auth);
@@ -451,7 +502,7 @@ const App = () => {
         if (!user || !db) return;
         try {
             const today = new Date().toISOString().split('T')[0];
-            const doctorRef = doc(db, 'artifacts', appId, 'users', user.uid, 'doctors', doctorId);
+            const doctorRef = doc(db, 'users', user.uid, 'doctors', doctorId);
             await setDoc(doctorRef, { lastVisit: today }, { merge: true });
         } catch (error) {
             console.error("Errore nell'aggiornare la data dell'ultima visita:", error);
@@ -465,7 +516,7 @@ const App = () => {
             return; 
         }
         try {
-            const doctorsPath = collection(db, 'artifacts', appId, 'users', user.uid, 'doctors');
+            const doctorsPath = collection(db, 'users', user.uid, 'doctors');
             if (doctorData.id) {
                 const { id, ...dataToSave } = doctorData;
                 await setDoc(doc(doctorsPath, id), dataToSave);
@@ -480,7 +531,7 @@ const App = () => {
         if (!user || !db) return;
         const confirmDelete = async () => {
             try {
-                const doctorRef = doc(db, 'artifacts', appId, 'users', user.uid, 'doctors', id);
+                const doctorRef = doc(db, 'users', user.uid, 'doctors', id);
                 await deleteDoc(doctorRef);
                 handleCloseDoctorModal();
             } catch (error) { console.error("Error deleting doctor:", error); }
@@ -497,7 +548,7 @@ const App = () => {
             return; 
         }
         try {
-            const structuresPath = collection(db, 'artifacts', appId, 'users', user.uid, 'structures');
+            const structuresPath = collection(db, 'users', user.uid, 'structures');
             if (structureData.id) {
                 const { id, ...dataToSave } = structureData;
                 await setDoc(doc(structuresPath, id), dataToSave);
@@ -512,8 +563,8 @@ const App = () => {
         if (!user || !db) return;
         const confirmDelete = async () => {
              try {
-                const structureRef = doc(db, 'artifacts', appId, 'users', user.uid, 'structures', id);
-                const doctorsPath = collection(db, 'artifacts', appId, 'users', user.uid, 'doctors');
+                const structureRef = doc(db, 'users', user.uid, 'structures', id);
+                const doctorsPath = collection(db, 'users', user.uid, 'doctors');
                 const batch = writeBatch(db);
                 const doctorsToUpdate = doctors.filter(d => d.structureIds?.includes(id));
                 doctorsToUpdate.forEach(d => {
@@ -550,8 +601,8 @@ const App = () => {
                     if (!data.doctors || !data.structures) throw new Error("File format invalid");
                     setIsLoading(true);
                     const batch = writeBatch(db);
-                    const doctorsPath = collection(db, 'artifacts', appId, 'users', user.uid, 'doctors');
-                    const structuresPath = collection(db, 'artifacts', appId, 'users', user.uid, 'structures');
+                    const doctorsPath = collection(db, 'users', user.uid, 'doctors');
+                    const structuresPath = collection(db, 'users', user.uid, 'structures');
                     const existingDocs = await getDocs(doctorsPath);
                     existingDocs.forEach(d => batch.delete(d.ref));
                     const existingStructs = await getDocs(structuresPath);
@@ -582,14 +633,7 @@ const App = () => {
 
     if (isLoading) return <div className="flex items-center justify-center h-screen bg-gray-900 text-white">Caricamento...</div>;
 
-    if (!user) {
-        return (
-            <div className="flex flex-col items-center justify-center h-screen bg-gray-900 text-white">
-                <h2 className="text-2xl mb-4">Autenticazione in corso...</h2>
-                {authError && <p className="text-red-400">{authError}</p>}
-            </div>
-        );
-    }
+    if (!user) return <AuthPage onLogin={handleLogin} onRegister={handleRegister} setAuthError={setAuthError} authError={authError} />;
 
     return (
         <div className="bg-gray-900 text-white min-h-screen font-sans p-4 sm:p-6 md:p-8">
@@ -607,7 +651,7 @@ const App = () => {
                     <div className="flex justify-between items-start flex-wrap gap-4">
                         <div>
                             <h1 className="text-4xl font-bold text-cyan-400">Gestionale Medici</h1>
-                            <p className="text-gray-400 mt-2">ID Utente: {user.uid}</p>
+                            <p className="text-gray-400 mt-2">Utente: {user.email}</p>
                         </div>
                         <div className="flex items-center gap-2">
                             <input type="file" id="import-file" className="hidden" accept=".json" onChange={handleImport} />

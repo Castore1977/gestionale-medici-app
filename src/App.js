@@ -421,7 +421,7 @@ const App = () => {
             unsubDoctors();
             unsubStructures();
         };
-    }, [user, db]);
+    }, [user, db, appId]);
 
     // --- FUNZIONI DI AUTENTICAZIONE ---
     const handleRegister = (email, password) => {
@@ -521,9 +521,9 @@ const App = () => {
             return; 
         }
         try {
+            const path = collection(db, 'artifacts', appId, 'users', user.uid, 'doctors');
             const dataToSave = {
                 ...doctorData,
-                // Assicura che i campi principali esistano
                 firstName: doctorData.firstName || '',
                 lastName: doctorData.lastName || '',
                 dateOfBirth: doctorData.dateOfBirth || '',
@@ -536,9 +536,9 @@ const App = () => {
 
             if (doctorData.id) {
                 const { id, ...finalData } = dataToSave;
-                await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'doctors', id), finalData);
+                await setDoc(doc(path, id), finalData);
             } else {
-                await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'doctors'), dataToSave);
+                await addDoc(path, dataToSave);
             }
             handleCloseDoctorModal();
         } catch (error) { console.error("Error saving doctor", error); }
@@ -564,11 +564,12 @@ const App = () => {
             return; 
         }
         try {
+            const path = collection(db, 'artifacts', appId, 'users', user.uid, 'structures');
             if (structureData.id) {
                 const { id, ...dataToSave } = structureData;
-                await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'structures', id), dataToSave);
+                await setDoc(doc(path, id), dataToSave);
             } else {
-                await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'structures'), structureData);
+                await addDoc(path, structureData);
             }
             handleCloseStructureModal();
         } catch (error) { console.error("Error saving structure:", error); }
@@ -661,7 +662,7 @@ const App = () => {
         };
         
         if (!user || !db) return;
-        setModalState({isOpen: true, title: 'Conferma Importazione', message: "Sei sicuro? L'importazione sovrascriverà tutti i dati attuali.", onConfirm: confirmImport, onCancel: () => { event.target.value = null; setModalState({isOpen: false}); } });
+        setModalState({ isOpen: true, title: 'Conferma Importazione', message: "Sei sicuro? L'importazione sovrascriverà tutti i dati attuali.", onConfirm: confirmImport, onCancel: () => { event.target.value = null; setModalState({isOpen: false}); } });
     };
 
     if (isLoading) return <div className="flex items-center justify-center h-screen bg-gray-900 text-white">Caricamento in corso...</div>;

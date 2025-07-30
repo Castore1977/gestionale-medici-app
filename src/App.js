@@ -1,11 +1,12 @@
+/* global __firebase_config, __app_id, __initial_auth_token */
 import React, { useState, useEffect, useCallback } from 'react';
 import { initializeApp } from 'firebase/app';
 import {
     getAuth,
-    createUserWithEmailAndPassword,
-    signInWithEmailAndPassword,
     signOut,
-    onAuthStateChanged
+    onAuthStateChanged,
+    signInWithCustomToken,
+    signInAnonymously
 } from 'firebase/auth';
 import {
     getFirestore,
@@ -31,64 +32,8 @@ const firebaseConfig = {
 };
 
 
-// --- COMPONENTE AUTENTICAZIONE ---
-const AuthPage = ({ onLogin, onRegister, setAuthError, authError }) => {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [isLogin, setIsLogin] = useState(true);
-
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        setAuthError('');
-        if (isLogin) {
-            onLogin(email, password);
-        } else {
-            onRegister(email, password);
-        }
-    };
-
-    return (
-        <div className="flex items-center justify-center min-h-screen bg-gray-900">
-            <div className="w-full max-w-md p-8 space-y-8 bg-gray-800 rounded-xl shadow-lg">
-                <h2 className="text-3xl font-bold text-center text-cyan-400">
-                    {isLogin ? 'Accedi al Gestionale' : 'Registra un Nuovo Account'}
-                </h2>
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="Indirizzo Email"
-                        required
-                        className="w-full px-4 py-2 text-white bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                    />
-                    <input
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="Password"
-                        required
-                        className="w-full px-4 py-2 text-white bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                    />
-                     {authError && <p className="text-red-400 text-sm">{authError}</p>}
-                    <button type="submit" className="w-full px-4 py-2 font-bold text-white bg-cyan-600 rounded-md hover:bg-cyan-700 transition-colors">
-                        {isLogin ? 'Accedi' : 'Registrati'}
-                    </button>
-                </form>
-                <p className="text-sm text-center text-gray-400">
-                    {isLogin ? "Non hai un account? " : "Hai già un account? "}
-                    <button onClick={() => { setIsLogin(!isLogin); setAuthError(''); }} className="font-medium text-cyan-400 hover:underline">
-                        {isLogin ? 'Registrati' : 'Accedi'}
-                    </button>
-                </p>
-            </div>
-        </div>
-    );
-};
-
-
-// --- COMPONENTE VISTA TABELLARE ---
-const TableView = ({ doctors, structures, alertDays, onDoctorDoubleClick, onSetTodayAsLastVisit }) => {
+// --- COMPONENTE VISTA TABELLARE (MODIFICATO PER GRUPPI) ---
+const TableView = ({ groupedData, structures, alertDays, onDoctorDoubleClick, onSetTodayAsLastVisit }) => {
     const daysOfWeek = ['lunedi', 'martedi', 'mercoledi', 'giovedi', 'venerdi', 'sabato', 'domenica'];
 
     const getVisitAlert = (lastVisitDate) => {
@@ -130,6 +75,14 @@ const TableView = ({ doctors, structures, alertDays, onDoctorDoubleClick, onSetT
         );
     };
 
+    if (Object.keys(groupedData).length === 0) {
+        return (
+            <div className="bg-gray-800 p-6 rounded-xl text-center text-gray-400">
+                Nessun medico trovato con i filtri attuali.
+            </div>
+        );
+    }
+
     return (
         <div className="bg-gray-800 p-4 sm:p-6 rounded-xl shadow-lg">
             <div className="overflow-x-auto">
@@ -143,30 +96,39 @@ const TableView = ({ doctors, structures, alertDays, onDoctorDoubleClick, onSetT
                         </tr>
                     </thead>
                     <tbody>
-                        {doctors.map(doctor => (
-                            <tr key={doctor.id} onDoubleClick={() => onDoctorDoubleClick(doctor)} className="bg-gray-800 border-b border-gray-700 hover:bg-gray-700/50 transition-colors cursor-pointer">
-                                <td className="px-6 py-4 font-medium text-white whitespace-nowrap">
-                                    <div className="flex items-center justify-between gap-3">
-                                        <div className="flex items-center gap-3">
-                                            {getVisitAlert(doctor.lastVisit)}
-                                            <span>{doctor.firstName} {doctor.lastName}</span>
-                                        </div>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onSetTodayAsLastVisit(doctor.id);
-                                            }}
-                                            className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-1 px-2 rounded-lg flex items-center gap-1.5"
-                                            title="Imposta data visita a oggi"
-                                        >
-                                            <CalendarPlus size={16} />
-                                        </button>
-                                    </div>
-                                </td>
-                                <td className="px-4 py-4 text-center">{doctor.lastVisit ? new Date(doctor.lastVisit).toLocaleDateString('it-IT') : 'N/D'}</td>
-                                <td className="px-4 py-4 text-center">{doctor.appointmentDate ? new Date(doctor.appointmentDate).toLocaleDateString('it-IT') : 'N/D'}</td>
-                                {daysOfWeek.map(day => <td key={day} className="px-4 py-4 text-center align-top h-16">{getShiftAndStructure(doctor.availability?.[day], doctor.structureIds)}</td>)}
-                            </tr>
+                        {Object.entries(groupedData).map(([groupName, groupDoctors]) => (
+                            <React.Fragment key={groupName}>
+                                <tr className="bg-gray-900/70 backdrop-blur-sm sticky top-0 z-10">
+                                    <th colSpan={10} className="px-6 py-3 text-left text-cyan-400 font-semibold text-base tracking-wider">
+                                        {groupName} <span className="text-gray-500 font-normal text-sm">({groupDoctors.length})</span>
+                                    </th>
+                                </tr>
+                                {groupDoctors.map(doctor => (
+                                    <tr key={`${doctor.id}-${groupName}`} onDoubleClick={() => onDoctorDoubleClick(doctor)} className="bg-gray-800 border-b border-gray-700 hover:bg-gray-700/50 transition-colors cursor-pointer">
+                                        <td className="px-6 py-4 font-medium text-white whitespace-nowrap">
+                                            <div className="flex items-center justify-between gap-3">
+                                                <div className="flex items-center gap-3">
+                                                    {getVisitAlert(doctor.lastVisit)}
+                                                    <span>{doctor.firstName} {doctor.lastName}</span>
+                                                </div>
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onSetTodayAsLastVisit(doctor.id);
+                                                    }}
+                                                    className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-1 px-2 rounded-lg flex items-center gap-1.5"
+                                                    title="Imposta data visita a oggi"
+                                                >
+                                                    <CalendarPlus size={16} />
+                                                </button>
+                                            </div>
+                                        </td>
+                                        <td className="px-4 py-4 text-center">{doctor.lastVisit ? new Date(doctor.lastVisit).toLocaleDateString('it-IT') : 'N/D'}</td>
+                                        <td className="px-4 py-4 text-center">{doctor.appointmentDate ? new Date(doctor.appointmentDate).toLocaleDateString('it-IT') : 'N/D'}</td>
+                                        {daysOfWeek.map(day => <td key={day} className="px-4 py-4 text-center align-top h-16">{getShiftAndStructure(doctor.availability?.[day], doctor.structureIds)}</td>)}
+                                    </tr>
+                                ))}
+                            </React.Fragment>
                         ))}
                     </tbody>
                 </table>
@@ -226,7 +188,7 @@ const DoctorModal = ({ isOpen, onClose, onSave, onDelete, structures, initialDat
                     <div><h3 className="text-lg font-semibold my-2">Note</h3><textarea name="notes" placeholder="Note aggiuntive..." value={doctorData.notes} onChange={handleChange} className="w-full bg-gray-700 p-3 rounded-lg" rows="3"></textarea></div>
                     <div><h3 className="text-lg font-semibold mb-2 flex items-center gap-2"><Clock size={20}/> Orari</h3><div className="grid sm:grid-cols-2 gap-4">{Object.keys(doctorData.availability).map(day => (<div key={day}><label className="capitalize text-gray-400">{day}</label><input type="text" placeholder="Es. 9-12 / 15-18" value={doctorData.availability[day]} onChange={(e) => handleAvailabilityChange(day, e.target.value)} className="w-full mt-1 bg-gray-700 p-2 rounded-lg" /></div>))}</div></div>
                     <div className="flex justify-between items-center gap-4 pt-4">
-                         <div>{isEditMode && <button type="button" onClick={handleDeleteClick} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2"><Trash2 size={18} /> Elimina</button>}</div>
+                        <div>{isEditMode && <button type="button" onClick={handleDeleteClick} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2"><Trash2 size={18} /> Elimina</button>}</div>
                         <div className="flex gap-4"><button type="button" onClick={onClose} className="bg-gray-600 font-bold py-2 px-4 rounded-lg">Annulla</button><button type="submit" className="bg-cyan-500 font-bold py-2 px-4 rounded-lg flex items-center gap-2"><Save size={18}/> Salva</button></div>
                     </div>
                 </form>
@@ -287,6 +249,10 @@ const ConfirmationModal = ({ isOpen, title, message, onConfirm, onCancel, confir
 
 
 const App = () => {
+    // --- COSTANTI GLOBALI ---
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
     // --- STATI GLOBALI ---
     const [db, setDb] = useState(null);
     const [auth, setAuth] = useState(null);
@@ -315,31 +281,40 @@ const App = () => {
 
     // --- INIZIALIZZAZIONE FIREBASE E AUTH ---
     useEffect(() => {
-        try {
-            // Verifica che le chiavi non siano i placeholder
-            if (firebaseConfig.apiKey === "YOUR_API_KEY") {
-                 console.error("Configurazione Firebase non valida. Sostituisci i placeholder in firebaseConfig.");
-                 setAuthError("Configurazione Firebase mancante. Controlla la console per i dettagli.");
-                 setIsLoading(false);
-                 return;
-            }
-            const app = initializeApp(firebaseConfig);
-            const firestoreDb = getFirestore(app);
-            const firebaseAuth = getAuth(app);
-            setDb(firestoreDb);
-            setAuth(firebaseAuth);
-
-            const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
-                setUser(user);
+        const initializeFirebase = async () => {
+            if (!firebaseConfig) {
+                console.error("Configurazione Firebase non trovata.");
+                setAuthError("Configurazione Firebase mancante. L'app non può funzionare.");
                 setIsLoading(false);
-            });
-            return () => unsubscribe();
-        } catch (e) {
-            console.error("Errore di configurazione Firebase.", e);
-            setAuthError("Errore di configurazione. Controlla la console.");
-            setIsLoading(false);
-        }
-    }, []);
+                return;
+            }
+
+            try {
+                const app = initializeApp(firebaseConfig);
+                const firestoreDb = getFirestore(app);
+                const firebaseAuth = getAuth(app);
+                setDb(firestoreDb);
+                setAuth(firebaseAuth);
+
+                onAuthStateChanged(firebaseAuth, (user) => {
+                    setUser(user);
+                    setIsLoading(false);
+                });
+                
+                if (initialAuthToken) {
+                    await signInWithCustomToken(firebaseAuth, initialAuthToken);
+                } else {
+                    await signInAnonymously(firebaseAuth);
+                }
+            } catch (e) {
+                console.error("Errore di configurazione o autenticazione Firebase.", e);
+                setAuthError("Errore di configurazione o autenticazione. Controlla la console.");
+                setIsLoading(false);
+            }
+        };
+
+        initializeFirebase();
+    }, [initialAuthToken]);
 
     // --- FETCH DATI SPECIFICI DELL'UTENTE ---
     useEffect(() => {
@@ -349,42 +324,38 @@ const App = () => {
             return;
         }
 
-        const doctorsQuery = collection(db, 'users', user.uid, 'doctors');
+        const doctorsPath = `artifacts/${appId}/users/${user.uid}/doctors`;
+        const structuresPath = `artifacts/${appId}/users/${user.uid}/structures`;
+
+        const doctorsQuery = collection(db, doctorsPath);
         const unsubDoctors = onSnapshot(doctorsQuery, snap => setDoctors(snap.docs.map(d => ({ id: d.id, ...d.data() }))), err => console.error("Errore fetch medici:", err));
 
-        const structuresQuery = collection(db, 'users', user.uid, 'structures');
+        const structuresQuery = collection(db, structuresPath);
         const unsubStructures = onSnapshot(structuresQuery, snap => setStructures(snap.docs.map(s => ({ id: s.id, ...s.data() }))), err => console.error("Errore fetch strutture:", err));
 
         return () => {
             unsubDoctors();
             unsubStructures();
         };
-    }, [user, db]);
+    }, [user, db, appId]);
 
     // --- FUNZIONI DI AUTENTICAZIONE ---
-    const handleRegister = (email, password) => {
-        if (!auth) return;
-        createUserWithEmailAndPassword(auth, email, password).catch(error => setAuthError(error.message));
-    };
-    const handleLogin = (email, password) => {
-        if (!auth) return;
-        signInWithEmailAndPassword(auth, email, password).catch(error => setAuthError(error.message));
-    };
     const handleLogout = () => {
         if (!auth) return;
         signOut(auth);
     };
 
-    // --- LOGICA DI FILTRAGGIO E ORDINAMENTO ---
-    const processedDoctors = React.useMemo(() => {
-        let items = [...doctors];
+    // --- LOGICA DI FILTRAGGIO, RAGGRUPPAMENTO E ORDINAMENTO ---
+    const groupedAndSortedDoctors = React.useMemo(() => {
+        // 1. Filtra i medici
+        let filteredItems = [...doctors];
 
-        if (searchQuery) items = items.filter(doctor => `${doctor.firstName} ${doctor.lastName}`.toLowerCase().includes(searchQuery.toLowerCase()));
-        if (dayFilter) items = items.filter(doctor => doctor.availability && doctor.availability[dayFilter] && doctor.availability[dayFilter].trim() !== '');
-        if (structureFilter.length > 0) items = items.filter(doctor => doctor.structureIds && doctor.structureIds.some(id => structureFilter.includes(id)));
+        if (searchQuery) filteredItems = filteredItems.filter(doctor => `${doctor.firstName} ${doctor.lastName}`.toLowerCase().includes(searchQuery.toLowerCase()));
+        if (dayFilter) filteredItems = filteredItems.filter(doctor => doctor.availability && doctor.availability[dayFilter] && doctor.availability[dayFilter].trim() !== '');
+        if (structureFilter.length > 0) filteredItems = filteredItems.filter(doctor => doctor.structureIds && doctor.structureIds.some(id => structureFilter.includes(id)));
 
         if (filterUpcoming) {
-            items = items.filter(doctor => {
+            filteredItems = filteredItems.filter(doctor => {
                 if (!doctor.appointmentDate) return false;
                 const today = new Date();
                 const sevenDaysFromNow = new Date();
@@ -397,7 +368,7 @@ const App = () => {
         }
 
         if (filterAlertsOnly) {
-            items = items.filter(doctor => {
+            filteredItems = filteredItems.filter(doctor => {
                 if (!doctor.lastVisit) return false;
                 const today = new Date();
                 const visitDate = new Date(doctor.lastVisit);
@@ -407,23 +378,67 @@ const App = () => {
                 return diffDays > alertDays.yellow;
             });
         }
-        if (sortConfig.key !== null) {
-            items.sort((a, b) => {
-                let aValue = a[sortConfig.key];
-                let bValue = b[sortConfig.key];
-                if (sortConfig.key === 'structure') {
-                    const getFirstName = (ids) => ids?.map(id => structures.find(s => s.id === id)?.name).filter(Boolean)[0] || '';
-                    aValue = getFirstName(a.structureIds);
-                    bValue = getFirstName(b.structureIds);
-                }
-                if (!aValue) return 1; if (!bValue) return -1;
-                if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
-                if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
-                return 0;
-            });
+
+        // 2. Raggruppa i medici filtrati
+        const groups = {};
+        structures.forEach(s => {
+            groups[s.name] = [];
+        });
+        groups['Non assegnato'] = [];
+
+        filteredItems.forEach(doctor => {
+            if (!doctor.structureIds || doctor.structureIds.length === 0) {
+                groups['Non assegnato'].push(doctor);
+            } else {
+                doctor.structureIds.forEach(id => {
+                    const structure = structures.find(s => s.id === id);
+                    if (structure && groups[structure.name]) {
+                        if (!groups[structure.name].some(d => d.id === doctor.id)) {
+                           groups[structure.name].push(doctor);
+                        }
+                    } else {
+                        if (!groups['Non assegnato'].some(d => d.id === doctor.id)) {
+                             groups['Non assegnato'].push(doctor);
+                        }
+                    }
+                });
+            }
+        });
+
+        // 3. Ordina i medici all'interno di ogni gruppo e rimuovi i gruppi vuoti
+        const finalGroups = {};
+        Object.entries(groups).forEach(([groupName, groupDoctors]) => {
+            if (groupDoctors.length > 0) {
+                groupDoctors.sort((a, b) => {
+                    if (sortConfig.key === null) return 0;
+                    let aValue = a[sortConfig.key];
+                    let bValue = b[sortConfig.key];
+                    if (sortConfig.key === 'structure') {
+                        const getFirstName = (ids) => ids?.map(id => structures.find(s => s.id === id)?.name).filter(Boolean)[0] || '';
+                        aValue = getFirstName(a.structureIds);
+                        bValue = getFirstName(b.structureIds);
+                    }
+                    if (!aValue) return 1; if (!bValue) return -1;
+                    if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+                    if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+                    return 0;
+                });
+                finalGroups[groupName] = groupDoctors;
+            }
+        });
+        
+        const sortedGroupNames = Object.keys(finalGroups).filter(name => name !== 'Non assegnato').sort();
+        if (finalGroups['Non assegnato']) {
+            sortedGroupNames.push('Non assegnato');
         }
-        return items;
-    }, [doctors, sortConfig, structures, filterAlertsOnly, alertDays, searchQuery, dayFilter, structureFilter, filterUpcoming]);
+
+        const orderedFinalGroups = {};
+        sortedGroupNames.forEach(name => {
+            orderedFinalGroups[name] = finalGroups[name];
+        });
+
+        return orderedFinalGroups;
+    }, [doctors, structures, sortConfig, filterAlertsOnly, alertDays, searchQuery, dayFilter, structureFilter, filterUpcoming]);
 
     const requestSort = (key) => {
         let direction = 'asc';
@@ -443,7 +458,7 @@ const App = () => {
         if (!user || !db) return;
         try {
             const today = new Date().toISOString().split('T')[0];
-            const doctorRef = doc(db, `users/${user.uid}/doctors`, doctorId);
+            const doctorRef = doc(db, `artifacts/${appId}/users/${user.uid}/doctors`, doctorId);
             await setDoc(doctorRef, { lastVisit: today }, { merge: true });
         } catch (error) {
             console.error("Errore nell'aggiornare la data dell'ultima visita:", error);
@@ -457,7 +472,7 @@ const App = () => {
             return; 
         }
         try {
-            const path = `users/${user.uid}/doctors`;
+            const path = `artifacts/${appId}/users/${user.uid}/doctors`;
             if (doctorData.id) {
                 const { id, ...dataToSave } = doctorData;
                 await setDoc(doc(db, path, id), dataToSave);
@@ -472,7 +487,7 @@ const App = () => {
         if (!user || !db) return;
         const confirmDelete = async () => {
             try {
-                await deleteDoc(doc(db, `users/${user.uid}/doctors`, id));
+                await deleteDoc(doc(db, `artifacts/${appId}/users/${user.uid}/doctors`, id));
                 handleCloseDoctorModal();
             } catch (error) { console.error("Error deleting doctor:", error); }
             finally { setModalState({ isOpen: false }); }
@@ -488,7 +503,7 @@ const App = () => {
             return; 
         }
         try {
-            const path = `users/${user.uid}/structures`;
+            const path = `artifacts/${appId}/users/${user.uid}/structures`;
             if (structureData.id) {
                 const { id, ...dataToSave } = structureData;
                 await setDoc(doc(db, path, id), dataToSave);
@@ -503,8 +518,8 @@ const App = () => {
         if (!user || !db) return;
         const confirmDelete = async () => {
              try {
-                const path = `users/${user.uid}/structures`;
-                const doctorsPath = `users/${user.uid}/doctors`;
+                const path = `artifacts/${appId}/users/${user.uid}/structures`;
+                const doctorsPath = `artifacts/${appId}/users/${user.uid}/doctors`;
                 const batch = writeBatch(db);
                 const doctorsToUpdate = doctors.filter(d => d.structureIds?.includes(id));
                 doctorsToUpdate.forEach(d => {
@@ -522,6 +537,7 @@ const App = () => {
 
     // --- FUNZIONI IMPORT/EXPORT ---
     const handleExport = () => { 
+        if (!doctors || !structures) return;
         const link = document.createElement("a"); 
         link.href = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ doctors, structures }, null, 2))}`; 
         link.download = "gestionale_medici_backup.json"; 
@@ -530,7 +546,7 @@ const App = () => {
 
     const handleImport = async (event) => {
         const file = event.target.files[0];
-        if (!file) return;
+        if (!file || !user || !db) return;
 
         const confirmImport = () => {
             setModalState({isOpen: false});
@@ -541,8 +557,8 @@ const App = () => {
                     if (!data.doctors || !data.structures) throw new Error("File format invalid");
                     setIsLoading(true);
                     const batch = writeBatch(db);
-                    const doctorsPath = collection(db, 'users', user.uid, 'doctors');
-                    const structuresPath = collection(db, 'users', user.uid, 'structures');
+                    const doctorsPath = collection(db, `artifacts/${appId}/users/${user.uid}/doctors`);
+                    const structuresPath = collection(db, `artifacts/${appId}/users/${user.uid}/structures`);
                     const existingDocs = await getDocs(doctorsPath);
                     existingDocs.forEach(d => batch.delete(d.ref));
                     const existingStructs = await getDocs(structuresPath);
@@ -567,13 +583,19 @@ const App = () => {
             reader.readAsText(file);
         };
         
-        if (!user || !db) return;
-        setModalState({isOpen: true, title: 'Conferma Importazione', message: "Sei sicuro? L'importazione sovrascriverà tutti i dati attuali.", onConfirm: confirmImport, onCancel: () => { event.target.value = null; setModalState({isOpen: false}); } });
+        setModalState({ isOpen: true, title: 'Conferma Importazione', message: "Sei sicuro? L'importazione sovrascriverà tutti i dati attuali.", onConfirm: confirmImport, onCancel: () => { event.target.value = null; setModalState({isOpen: false}); } });
     };
 
-    if (isLoading) return <div className="flex items-center justify-center h-screen bg-gray-900 text-white">Caricamento...</div>;
+    if (isLoading) return <div className="flex items-center justify-center h-screen bg-gray-900 text-white">Caricamento e autenticazione...</div>;
 
-    if (!user) return <AuthPage onLogin={handleLogin} onRegister={handleRegister} setAuthError={setAuthError} authError={authError} />;
+    if (!user) {
+        return (
+            <div className="flex flex-col items-center justify-center h-screen bg-gray-900 text-white">
+                <h1 className="text-2xl mb-4">Autenticazione Fallita</h1>
+                <p className="text-red-400">{authError || "Impossibile autenticare l'utente."}</p>
+            </div>
+        );
+    }
 
     return (
         <div className="bg-gray-900 text-white min-h-screen font-sans p-4 sm:p-6 md:p-8">
@@ -591,7 +613,7 @@ const App = () => {
                     <div className="flex justify-between items-start flex-wrap gap-4">
                         <div>
                             <h1 className="text-4xl font-bold text-cyan-400">Gestionale Medici</h1>
-                            <p className="text-gray-400 mt-2">Utente: {user.email}</p>
+                            <p className="text-gray-400 mt-2">Utente: {user.isAnonymous ? 'Ospite' : user.email}</p>
                         </div>
                         <div className="flex items-center gap-2">
                             <input type="file" id="import-file" className="hidden" accept=".json" onChange={handleImport} />
@@ -632,7 +654,7 @@ const App = () => {
                                 <div className="flex items-center gap-2"><label htmlFor="yellow-days" className="text-sm text-yellow-300">Giallo (giorni):</label><input type="number" id="yellow-days" value={alertDays.yellow} onChange={(e) => setAlertDays(p => ({ ...p, yellow: Number(e.target.value) || 0 }))} className="bg-gray-700 w-20 p-2 rounded-md"/></div>
                                 <div className="flex items-center gap-2"><label htmlFor="red-days" className="text-sm text-red-300">Rosso (giorni):</label><input type="number" id="red-days" value={alertDays.red} onChange={(e) => setAlertDays(p => ({ ...p, red: Number(e.target.value) || 0 }))} className="bg-gray-700 w-20 p-2 rounded-md"/></div>
                             </div>
-                            <TableView doctors={processedDoctors} structures={structures} alertDays={alertDays} onDoctorDoubleClick={handleOpenDoctorModal} onSetTodayAsLastVisit={handleSetTodayAsLastVisit} />
+                            <TableView groupedData={groupedAndSortedDoctors} structures={structures} alertDays={alertDays} onDoctorDoubleClick={handleOpenDoctorModal} onSetTodayAsLastVisit={handleSetTodayAsLastVisit} />
                         </>
                     )}
                     {activeTab === 'strutture' && (

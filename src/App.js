@@ -35,7 +35,6 @@ const firebaseConfig = {
 
 const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'default-app-id';
 
-
 // --- COMPONENTE AUTENTICAZIONE ---
 const AuthPage = ({ onLogin, onRegister, setAuthError, authError }) => {
     const [email, setEmail] = useState('');
@@ -626,35 +625,29 @@ const App = () => {
                     const batch = writeBatch(db);
                     const doctorsPath = collection(db, 'artifacts', appId, 'users', user.uid, 'doctors');
                     const structuresPath = collection(db, 'artifacts', appId, 'users', user.uid, 'structures');
+                    
                     const existingDocs = await getDocs(doctorsPath);
                     existingDocs.forEach(d => batch.delete(d.ref));
                     const existingStructs = await getDocs(structuresPath);
                     existingStructs.forEach(s => batch.delete(s.ref));
                     
-                    // Importa prima le strutture per avere gli ID
-                    const structureIdMap = {};
-                    for (const s of data.structures) {
+                    // Restore structures from backup, preserving IDs
+                    (data.structures || []).forEach(s => {
                         const { id, ...structData } = s;
-                        const newDocRef = doc(structuresPath); // Genera nuovo ID
-                        structureIdMap[id] = newDocRef.id; // Mappa vecchio ID al nuovo
-                        batch.set(newDocRef, structData);
-                    }
-
-                    data.doctors.forEach(d => {
-                        const { id, ...docData } = d;
-                        // Mappa i vecchi ID delle strutture con i nuovi
-                        const newStructureIds = (docData.structureIds || []).map(oldId => structureIdMap[oldId]).filter(Boolean);
-                        const newDoc = {
-                            ...docData,
-                            structureIds: newStructureIds,
-                            // Assicura valori di default per i campi non presenti nel JSON
-                            notes: docData.notes || '',
-                            lastVisit: docData.lastVisit || '',
-                            appointmentDate: docData.appointmentDate || '',
-                            availability: docData.availability || { lunedi: '', martedi: '', mercoledi: '', giovedi: '', venerdi: '', sabato: '', domenica: '' },
-                        };
-                        batch.set(doc(doctorsPath), newDoc);
+                        const docRef = id ? doc(structuresPath, id) : doc(structuresPath);
+                        batch.set(docRef, structData);
                     });
+                    
+                    // Restore doctors from backup, preserving IDs
+                    (data.doctors || []).forEach(d => {
+                        const { id, ...docData } = d;
+                        const docRef = id ? doc(doctorsPath, id) : doc(doctorsPath);
+                        const newDoc = {
+                            notes: '', lastVisit: '', appointmentDate: '', ...docData
+                        };
+                        batch.set(docRef, newDoc);
+                    });
+                    
                     await batch.commit();
                 } catch (err) {
                     console.error(err);

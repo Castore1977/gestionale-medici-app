@@ -33,7 +33,7 @@ const firebaseConfig = {
     appId: process.env.REACT_APP_FIREBASE_APP_ID
 };
 
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'default-app-id';
 
 
 // --- COMPONENTE AUTENTICAZIONE ---
@@ -379,7 +379,7 @@ const App = () => {
 
             setPersistence(firebaseAuth, browserLocalPersistence)
                 .then(async () => {
-                    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                    const initialAuthToken = typeof window.__initial_auth_token !== 'undefined' ? window.__initial_auth_token : null;
                     if (initialAuthToken) {
                         try {
                             await signInWithCustomToken(firebaseAuth, initialAuthToken);

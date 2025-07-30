@@ -412,10 +412,10 @@ const App = () => {
             return;
         }
 
-        const doctorsQuery = collection(db, 'users', user.uid, 'doctors');
+        const doctorsQuery = collection(db, 'artifacts', appId, 'users', user.uid, 'doctors');
         const unsubDoctors = onSnapshot(doctorsQuery, snap => setDoctors(snap.docs.map(d => ({ id: d.id, ...d.data() }))), err => console.error("Errore fetch medici:", err));
 
-        const structuresQuery = collection(db, 'users', user.uid, 'structures');
+        const structuresQuery = collection(db, 'artifacts', appId, 'users', user.uid, 'structures');
         const unsubStructures = onSnapshot(structuresQuery, snap => setStructures(snap.docs.map(s => ({ id: s.id, ...s.data() })).sort((a, b) => a.name.localeCompare(b.name))), err => console.error("Errore fetch strutture:", err));
 
         return () => {
@@ -508,7 +508,7 @@ const App = () => {
         if (!user || !db) return;
         try {
             const today = new Date().toISOString().split('T')[0];
-            const doctorRef = doc(db, `users/${user.uid}/doctors`, doctorId);
+            const doctorRef = doc(db, 'artifacts', appId, 'users', user.uid, 'doctors', doctorId);
             await setDoc(doctorRef, { lastVisit: today }, { merge: true });
         } catch (error) {
             console.error("Errore nell'aggiornare la data dell'ultima visita:", error);
@@ -522,7 +522,6 @@ const App = () => {
             return; 
         }
         try {
-            const path = `users/${user.uid}/doctors`;
             const dataToSave = {
                 ...doctorData,
                 // Assicura che i campi principali esistano
@@ -538,9 +537,9 @@ const App = () => {
 
             if (doctorData.id) {
                 const { id, ...finalData } = dataToSave;
-                await setDoc(doc(db, path, id), finalData);
+                await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'doctors', id), finalData);
             } else {
-                await addDoc(collection(db, path), dataToSave);
+                await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'doctors'), dataToSave);
             }
             handleCloseDoctorModal();
         } catch (error) { console.error("Error saving doctor", error); }
@@ -550,7 +549,7 @@ const App = () => {
         if (!user || !db) return;
         const confirmDelete = async () => {
             try {
-                await deleteDoc(doc(db, `users/${user.uid}/doctors`, id));
+                await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'doctors', id));
                 handleCloseDoctorModal();
             } catch (error) { console.error("Error deleting doctor:", error); }
             finally { setModalState({ isOpen: false }); }
@@ -566,12 +565,11 @@ const App = () => {
             return; 
         }
         try {
-            const path = `users/${user.uid}/structures`;
             if (structureData.id) {
                 const { id, ...dataToSave } = structureData;
-                await setDoc(doc(db, path, id), dataToSave);
+                await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'structures', id), dataToSave);
             } else {
-                await addDoc(collection(db, path), structureData);
+                await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'structures'), structureData);
             }
             handleCloseStructureModal();
         } catch (error) { console.error("Error saving structure:", error); }
@@ -581,16 +579,19 @@ const App = () => {
         if (!user || !db) return;
         const confirmDelete = async () => {
              try {
-                const path = `users/${user.uid}/structures`;
-                const doctorsPath = `users/${user.uid}/doctors`;
                 const batch = writeBatch(db);
                 const doctorsToUpdate = doctors.filter(d => d.structureIds?.includes(id));
+                
                 doctorsToUpdate.forEach(d => {
                     const newIds = d.structureIds.filter(sid => sid !== id);
-                    batch.update(doc(db, doctorsPath, d.id), { structureIds: newIds });
+                    const doctorRef = doc(db, 'artifacts', appId, 'users', user.uid, 'doctors', d.id);
+                    batch.update(doctorRef, { structureIds: newIds });
                 });
+                
                 await batch.commit();
-                await deleteDoc(doc(db, path, id));
+                
+                const structureRef = doc(db, 'artifacts', appId, 'users', user.uid, 'structures', id);
+                await deleteDoc(structureRef);
             } catch (error) { console.error(error); }
             finally { setModalState({ isOpen: false }); }
         };
@@ -623,8 +624,8 @@ const App = () => {
                     if (!data.doctors || !data.structures) throw new Error("File format invalid");
                     setIsLoading(true);
                     const batch = writeBatch(db);
-                    const doctorsPath = collection(db, 'users', user.uid, 'doctors');
-                    const structuresPath = collection(db, 'users', user.uid, 'structures');
+                    const doctorsPath = collection(db, 'artifacts', appId, 'users', user.uid, 'doctors');
+                    const structuresPath = collection(db, 'artifacts', appId, 'users', user.uid, 'structures');
                     const existingDocs = await getDocs(doctorsPath);
                     existingDocs.forEach(d => batch.delete(d.ref));
                     const existingStructs = await getDocs(structuresPath);

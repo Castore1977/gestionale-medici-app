@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import {
     getAuth,
@@ -70,7 +70,7 @@ const AuthPage = ({ onLogin, onRegister, setAuthError, authError }) => {
                         required
                         className="w-full px-4 py-2 text-white bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500"
                     />
-                     {authError && <p className="text-red-400 text-sm">{authError}</p>}
+                    {authError && <p className="text-red-400 text-sm">{authError}</p>}
                     <button type="submit" className="w-full px-4 py-2 font-bold text-white bg-cyan-600 rounded-md hover:bg-cyan-700 transition-colors">
                         {isLogin ? 'Accedi' : 'Registrati'}
                     </button>
@@ -87,8 +87,8 @@ const AuthPage = ({ onLogin, onRegister, setAuthError, authError }) => {
 };
 
 
-// --- COMPONENTE VISTA TABELLARE ---
-const TableView = ({ doctors, structures, alertDays, onDoctorDoubleClick, onSetTodayAsLastVisit }) => {
+// --- COMPONENTE VISTA TABELLARE (MODIFICATO PER GRUPPI) ---
+const TableView = ({ groupedDoctors, structures, alertDays, onDoctorDoubleClick, onSetTodayAsLastVisit }) => {
     const daysOfWeek = ['lunedi', 'martedi', 'mercoledi', 'giovedi', 'venerdi', 'sabato', 'domenica'];
 
     const getVisitAlert = (lastVisitDate) => {
@@ -118,14 +118,17 @@ const TableView = ({ doctors, structures, alertDays, onDoctorDoubleClick, onSetT
             const startHour = parseInt(slot.split('-')[0], 10);
             if (!isNaN(startHour)) { if (startHour < 14) morning = true; else afternoon = true; }
         });
-        const associatedStructures = structureIds?.map(id => structures.find(s => s.id === id)?.name).filter(Boolean).join(', ');
+        
+        // In this grouped view, the structure name is already in the header, so we don't need to repeat it here.
+        // We can show it if a doctor belongs to multiple structures, but for now, let's keep it clean.
+        // const associatedStructures = structureIds?.map(id => structures.find(s => s.id === id)?.name).filter(Boolean).join(', ');
+
         return (
             <div className="flex flex-col items-center justify-center gap-1">
                 <div className="flex items-center justify-center gap-1.5 flex-wrap">
                     {morning && <span className="flex items-center gap-1 bg-yellow-400 text-yellow-900 text-xs font-bold px-2 py-0.5 rounded-full" title="Mattina"><Sun size={12}/> M</span>}
                     {afternoon && <span className="flex items-center gap-1 bg-indigo-400 text-indigo-900 text-xs font-bold px-2 py-0.5 rounded-full" title="Pomeriggio"><Moon size={12}/> P</span>}
                 </div>
-                {associatedStructures && <span className="text-xs text-gray-400 mt-1 text-center">{associatedStructures}</span>}
             </div>
         );
     };
@@ -133,8 +136,8 @@ const TableView = ({ doctors, structures, alertDays, onDoctorDoubleClick, onSetT
     return (
         <div className="bg-gray-800 p-4 sm:p-6 rounded-xl shadow-lg">
             <div className="overflow-x-auto">
-                 <table className="w-full min-w-[1200px] text-left text-sm text-gray-300">
-                    <thead className="bg-gray-700 text-xs text-gray-400 uppercase tracking-wider">
+                <table className="w-full min-w-[1200px] text-left text-sm text-gray-300 border-separate border-spacing-0">
+                    <thead className="bg-gray-700 text-xs text-gray-400 uppercase tracking-wider sticky top-0 z-20">
                         <tr>
                             <th scope="col" className="px-6 py-3 rounded-l-lg w-1/5">Medico</th>
                             <th scope="col" className="px-4 py-3 text-center">Ultima Visita</th>
@@ -142,34 +145,49 @@ const TableView = ({ doctors, structures, alertDays, onDoctorDoubleClick, onSetT
                             {daysOfWeek.map((day, idx) => <th scope="col" key={day} className={`px-4 py-3 text-center capitalize ${idx === daysOfWeek.length - 1 ? 'rounded-r-lg' : ''}`}>{day}</th>)}
                         </tr>
                     </thead>
-                    <tbody>
-                        {doctors.map(doctor => (
-                            <tr key={doctor.id} onDoubleClick={() => onDoctorDoubleClick(doctor)} className="bg-gray-800 border-b border-gray-700 hover:bg-gray-700/50 transition-colors cursor-pointer">
-                                <td className="px-6 py-4 font-medium text-white whitespace-nowrap">
-                                    <div className="flex items-center justify-between gap-3">
-                                        <div className="flex items-center gap-3">
-                                            {getVisitAlert(doctor.lastVisit)}
-                                            <span>{doctor.firstName} {doctor.lastName}</span>
-                                        </div>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onSetTodayAsLastVisit(doctor.id);
-                                            }}
-                                            className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-1 px-2 rounded-lg flex items-center gap-1.5"
-                                            title="Imposta data visita a oggi"
-                                        >
-                                            <CalendarPlus size={16} />
-                                        </button>
+                    {groupedDoctors.map(group => (
+                        <tbody key={group.id}>
+                            <tr className="bg-gray-900/80 backdrop-blur-sm sticky top-[41px] z-10">
+                                <th colSpan={10} className="px-6 py-3 text-left text-cyan-300 text-base font-bold tracking-wider">
+                                    <div className="flex items-center gap-3">
+                                      <Building size={20} />
+                                      {group.name} ({group.doctors.length})
                                     </div>
-                                </td>
-                                <td className="px-4 py-4 text-center">{doctor.lastVisit ? new Date(doctor.lastVisit).toLocaleDateString('it-IT') : 'N/D'}</td>
-                                <td className="px-4 py-4 text-center">{doctor.appointmentDate ? new Date(doctor.appointmentDate).toLocaleDateString('it-IT') : 'N/D'}</td>
-                                {daysOfWeek.map(day => <td key={day} className="px-4 py-4 text-center align-top h-16">{getShiftAndStructure(doctor.availability?.[day], doctor.structureIds)}</td>)}
+                                </th>
                             </tr>
-                        ))}
-                    </tbody>
+                            {group.doctors.map(doctor => (
+                                <tr key={doctor.id} onDoubleClick={() => onDoctorDoubleClick(doctor)} className="bg-gray-800 border-b border-gray-700 hover:bg-gray-700/50 transition-colors cursor-pointer group">
+                                    <td className="px-6 py-4 font-medium text-white whitespace-nowrap">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <div className="flex items-center gap-3">
+                                                {getVisitAlert(doctor.lastVisit)}
+                                                <span>{doctor.firstName} {doctor.lastName}</span>
+                                            </div>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onSetTodayAsLastVisit(doctor.id);
+                                                }}
+                                                className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-1 px-2 rounded-lg flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                title="Imposta data visita a oggi"
+                                            >
+                                                <CalendarPlus size={16} />
+                                            </button>
+                                        </div>
+                                    </td>
+                                    <td className="px-4 py-4 text-center">{doctor.lastVisit ? new Date(doctor.lastVisit).toLocaleDateString('it-IT') : 'N/D'}</td>
+                                    <td className="px-4 py-4 text-center">{doctor.appointmentDate ? new Date(doctor.appointmentDate).toLocaleDateString('it-IT') : 'N/D'}</td>
+                                    {daysOfWeek.map(day => <td key={day} className="px-4 py-4 text-center align-top h-16">{getShiftAndStructure(doctor.availability?.[day], doctor.structureIds)}</td>)}
+                                </tr>
+                            ))}
+                        </tbody>
+                    ))}
                 </table>
+                 {groupedDoctors.length === 0 && (
+                    <div className="text-center py-10 text-gray-400">
+                        <p>Nessun medico trovato con i filtri attuali.</p>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -226,7 +244,7 @@ const DoctorModal = ({ isOpen, onClose, onSave, onDelete, structures, initialDat
                     <div><h3 className="text-lg font-semibold my-2">Note</h3><textarea name="notes" placeholder="Note aggiuntive..." value={doctorData.notes} onChange={handleChange} className="w-full bg-gray-700 p-3 rounded-lg" rows="3"></textarea></div>
                     <div><h3 className="text-lg font-semibold mb-2 flex items-center gap-2"><Clock size={20}/> Orari</h3><div className="grid sm:grid-cols-2 gap-4">{Object.keys(doctorData.availability).map(day => (<div key={day}><label className="capitalize text-gray-400">{day}</label><input type="text" placeholder="Es. 9-12 / 15-18" value={doctorData.availability[day]} onChange={(e) => handleAvailabilityChange(day, e.target.value)} className="w-full mt-1 bg-gray-700 p-2 rounded-lg" /></div>))}</div></div>
                     <div className="flex justify-between items-center gap-4 pt-4">
-                         <div>{isEditMode && <button type="button" onClick={handleDeleteClick} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2"><Trash2 size={18} /> Elimina</button>}</div>
+                        <div>{isEditMode && <button type="button" onClick={handleDeleteClick} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2"><Trash2 size={18} /> Elimina</button>}</div>
                         <div className="flex gap-4"><button type="button" onClick={onClose} className="bg-gray-600 font-bold py-2 px-4 rounded-lg">Annulla</button><button type="submit" className="bg-cyan-500 font-bold py-2 px-4 rounded-lg flex items-center gap-2"><Save size={18}/> Salva</button></div>
                     </div>
                 </form>
@@ -316,13 +334,8 @@ const App = () => {
     // --- INIZIALIZZAZIONE FIREBASE E AUTH ---
     useEffect(() => {
         try {
-            // Verifica che le chiavi non siano i placeholder
-            if (firebaseConfig.apiKey === "YOUR_API_KEY") {
-                 console.error("Configurazione Firebase non valida. Sostituisci i placeholder in firebaseConfig.");
-                 setAuthError("Configurazione Firebase mancante. Controlla la console per i dettagli.");
-                 setIsLoading(false);
-                 return;
-            }
+            // Il controllo esplicito per la chiave API è stato rimosso per consentire il rendering dell'anteprima
+            // con valori fittizi. Gli errori di Firebase verranno gestiti durante i tentativi di autenticazione.
             const app = initializeApp(firebaseConfig);
             const firestoreDb = getFirestore(app);
             const firebaseAuth = getAuth(app);
@@ -335,8 +348,8 @@ const App = () => {
             });
             return () => unsubscribe();
         } catch (e) {
-            console.error("Errore di configurazione Firebase.", e);
-            setAuthError("Errore di configurazione. Controlla la console.");
+            console.error("Errore durante l'inizializzazione di Firebase.", e);
+            setAuthError("Errore di configurazione di Firebase. Controlla la console.");
             setIsLoading(false);
         }
     }, []);
@@ -375,16 +388,15 @@ const App = () => {
         signOut(auth);
     };
 
-    // --- LOGICA DI FILTRAGGIO E ORDINAMENTO ---
-    const processedDoctors = React.useMemo(() => {
-        let items = [...doctors];
-
-        if (searchQuery) items = items.filter(doctor => `${doctor.firstName} ${doctor.lastName}`.toLowerCase().includes(searchQuery.toLowerCase()));
-        if (dayFilter) items = items.filter(doctor => doctor.availability && doctor.availability[dayFilter] && doctor.availability[dayFilter].trim() !== '');
-        if (structureFilter.length > 0) items = items.filter(doctor => doctor.structureIds && doctor.structureIds.some(id => structureFilter.includes(id)));
-
+    // --- LOGICA DI FILTRAGGIO, RAGGRUPPAMENTO E ORDINAMENTO ---
+    const groupedDoctors = useMemo(() => {
+        // 1. Filtra i medici
+        let filtered = [...doctors];
+        if (searchQuery) filtered = filtered.filter(doctor => `${doctor.firstName} ${doctor.lastName}`.toLowerCase().includes(searchQuery.toLowerCase()));
+        if (dayFilter) filtered = filtered.filter(doctor => doctor.availability && doctor.availability[dayFilter] && doctor.availability[dayFilter].trim() !== '');
+        if (structureFilter.length > 0) filtered = filtered.filter(doctor => doctor.structureIds && doctor.structureIds.some(id => structureFilter.includes(id)));
         if (filterUpcoming) {
-            items = items.filter(doctor => {
+            filtered = filtered.filter(doctor => {
                 if (!doctor.appointmentDate) return false;
                 const today = new Date();
                 const sevenDaysFromNow = new Date();
@@ -395,9 +407,8 @@ const App = () => {
                 return appointmentDate >= today && appointmentDate <= sevenDaysFromNow;
             });
         }
-
         if (filterAlertsOnly) {
-            items = items.filter(doctor => {
+            filtered = filtered.filter(doctor => {
                 if (!doctor.lastVisit) return false;
                 const today = new Date();
                 const visitDate = new Date(doctor.lastVisit);
@@ -407,23 +418,45 @@ const App = () => {
                 return diffDays > alertDays.yellow;
             });
         }
-        if (sortConfig.key !== null) {
-            items.sort((a, b) => {
-                let aValue = a[sortConfig.key];
-                let bValue = b[sortConfig.key];
-                if (sortConfig.key === 'structure') {
-                    const getFirstName = (ids) => ids?.map(id => structures.find(s => s.id === id)?.name).filter(Boolean)[0] || '';
-                    aValue = getFirstName(a.structureIds);
-                    bValue = getFirstName(b.structureIds);
+
+        // 2. Raggruppa i medici filtrati
+        const groups = {};
+        structures.forEach(s => {
+            groups[s.id] = { id: s.id, name: s.name, doctors: [] };
+        });
+        groups['unassigned'] = { id: 'unassigned', name: 'Non Assegnati', doctors: [] };
+
+        filtered.forEach(doctor => {
+            if (doctor.structureIds && doctor.structureIds.length > 0) {
+                doctor.structureIds.forEach(id => {
+                    if (groups[id]) {
+                        groups[id].doctors.push(doctor);
+                    }
+                });
+            } else {
+                groups['unassigned'].doctors.push(doctor);
+            }
+        });
+
+        // 3. Ordina i medici all'interno di ogni gruppo e restituisci i gruppi non vuoti
+        return Object.values(groups)
+            .map(group => {
+                if (sortConfig.key !== null) {
+                    group.doctors.sort((a, b) => {
+                        let aValue = a[sortConfig.key];
+                        let bValue = b[sortConfig.key];
+                        if (!aValue) return 1;
+                        if (!bValue) return -1;
+                        if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+                        if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+                        return 0;
+                    });
                 }
-                if (!aValue) return 1; if (!bValue) return -1;
-                if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
-                if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
-                return 0;
-            });
-        }
-        return items;
-    }, [doctors, sortConfig, structures, filterAlertsOnly, alertDays, searchQuery, dayFilter, structureFilter, filterUpcoming]);
+                return group;
+            })
+            .filter(group => group.doctors.length > 0);
+
+    }, [doctors, structures, sortConfig, filterAlertsOnly, alertDays, searchQuery, dayFilter, structureFilter, filterUpcoming]);
 
     const requestSort = (key) => {
         let direction = 'asc';
@@ -530,7 +563,7 @@ const App = () => {
 
     const handleImport = async (event) => {
         const file = event.target.files[0];
-        if (!file) return;
+        if (!file || !user || !db) return;
 
         const confirmImport = () => {
             setModalState({isOpen: false});
@@ -567,7 +600,6 @@ const App = () => {
             reader.readAsText(file);
         };
         
-        if (!user || !db) return;
         setModalState({isOpen: true, title: 'Conferma Importazione', message: "Sei sicuro? L'importazione sovrascriverà tutti i dati attuali.", onConfirm: confirmImport, onCancel: () => { event.target.value = null; setModalState({isOpen: false}); } });
     };
 
@@ -615,12 +647,12 @@ const App = () => {
                                 </div>
                             </div>
                             <div className="flex flex-wrap items-center justify-center gap-4 text-sm mb-6 bg-gray-800/50 p-4 rounded-lg">
-                                 <div className="flex items-center gap-2"><span className="font-semibold">Ordina per:</span><button onClick={() => requestSort('lastName')} className={`px-3 py-1 rounded-full ${sortConfig.key === 'lastName' ? 'bg-cyan-600' : 'bg-gray-700'}`}>Nome</button><button onClick={() => requestSort('lastVisit')} className={`px-3 py-1 rounded-full ${sortConfig.key === 'lastVisit' ? 'bg-cyan-600' : 'bg-gray-700'}`}>Ultima Visita</button></div>
-                                 <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={filterAlertsOnly} onChange={() => setFilterAlertsOnly(!filterAlertsOnly)} className="form-checkbox h-5 w-5 text-cyan-500 bg-gray-900 border-gray-600 rounded focus:ring-cyan-600"/><span className="flex items-center gap-1"><Filter size={14}/> Solo con alert</span></label>
-                                 <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={filterUpcoming} onChange={() => setFilterUpcoming(!filterUpcoming)} className="form-checkbox h-5 w-5 text-cyan-500 bg-gray-900 border-gray-600 rounded focus:ring-cyan-600"/><span className="flex items-center gap-1"><CalendarPlus size={14}/> App. prossimi 7 gg</span></label>
-                                 <div className="flex items-center gap-2"><label className="font-semibold" htmlFor="day-filter">Giorno:</label><select id="day-filter" value={dayFilter} onChange={(e) => setDayFilter(e.target.value)} className="bg-gray-700 text-white p-2 rounded-md"><option value="">Qualsiasi</option><option value="lunedi">Lunedì</option><option value="martedi">Martedì</option><option value="mercoledi">Mercoledì</option><option value="giovedi">Giovedì</option><option value="venerdi">Venerdì</option><option value="sabato">Sabato</option><option value="domenica">Domenica</option></select></div>
-                                 <div className="relative"><button onClick={() => setIsStructureDropdownOpen(!isStructureDropdownOpen)} className="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded-md">Filtra per Struttura <ChevronDown size={16}/></button>
-                                    {isStructureDropdownOpen && (<div className="absolute top-full mt-2 w-56 bg-gray-600 rounded-md shadow-lg z-10 p-2">
+                                <div className="flex items-center gap-2"><span className="font-semibold">Ordina per:</span><button onClick={() => requestSort('lastName')} className={`px-3 py-1 rounded-full ${sortConfig.key === 'lastName' ? 'bg-cyan-600' : 'bg-gray-700'}`}>Nome</button><button onClick={() => requestSort('lastVisit')} className={`px-3 py-1 rounded-full ${sortConfig.key === 'lastVisit' ? 'bg-cyan-600' : 'bg-gray-700'}`}>Ultima Visita</button></div>
+                                <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={filterAlertsOnly} onChange={() => setFilterAlertsOnly(!filterAlertsOnly)} className="form-checkbox h-5 w-5 text-cyan-500 bg-gray-900 border-gray-600 rounded focus:ring-cyan-600"/><span className="flex items-center gap-1"><Filter size={14}/> Solo con alert</span></label>
+                                <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={filterUpcoming} onChange={() => setFilterUpcoming(!filterUpcoming)} className="form-checkbox h-5 w-5 text-cyan-500 bg-gray-900 border-gray-600 rounded focus:ring-cyan-600"/><span className="flex items-center gap-1"><CalendarPlus size={14}/> App. prossimi 7 gg</span></label>
+                                <div className="flex items-center gap-2"><label className="font-semibold" htmlFor="day-filter">Giorno:</label><select id="day-filter" value={dayFilter} onChange={(e) => setDayFilter(e.target.value)} className="bg-gray-700 text-white p-2 rounded-md"><option value="">Qualsiasi</option><option value="lunedi">Lunedì</option><option value="martedi">Martedì</option><option value="mercoledi">Mercoledì</option><option value="giovedi">Giovedì</option><option value="venerdi">Venerdì</option><option value="sabato">Sabato</option><option value="domenica">Domenica</option></select></div>
+                                <div className="relative"><button onClick={() => setIsStructureDropdownOpen(!isStructureDropdownOpen)} className="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded-md">Filtra per Struttura <ChevronDown size={16}/></button>
+                                    {isStructureDropdownOpen && (<div className="absolute top-full mt-2 w-56 bg-gray-600 rounded-md shadow-lg z-30 p-2">
                                         <button onClick={() => setStructureFilter([])} className="w-full text-left p-1.5 rounded-md hover:bg-gray-500 font-semibold mb-1">Tutte le strutture</button>
                                         <hr className="border-gray-500 mb-1"/>
                                         {structures.map(s => (<label key={s.id} className="flex items-center gap-2 p-1.5 rounded-md hover:bg-gray-500 cursor-pointer"><input type="checkbox" checked={structureFilter.includes(s.id)} onChange={() => handleStructureFilterChange(s.id)} className="form-checkbox h-4 w-4 text-cyan-500"/>{s.name}</label>))}
@@ -632,7 +664,7 @@ const App = () => {
                                 <div className="flex items-center gap-2"><label htmlFor="yellow-days" className="text-sm text-yellow-300">Giallo (giorni):</label><input type="number" id="yellow-days" value={alertDays.yellow} onChange={(e) => setAlertDays(p => ({ ...p, yellow: Number(e.target.value) || 0 }))} className="bg-gray-700 w-20 p-2 rounded-md"/></div>
                                 <div className="flex items-center gap-2"><label htmlFor="red-days" className="text-sm text-red-300">Rosso (giorni):</label><input type="number" id="red-days" value={alertDays.red} onChange={(e) => setAlertDays(p => ({ ...p, red: Number(e.target.value) || 0 }))} className="bg-gray-700 w-20 p-2 rounded-md"/></div>
                             </div>
-                            <TableView doctors={processedDoctors} structures={structures} alertDays={alertDays} onDoctorDoubleClick={handleOpenDoctorModal} onSetTodayAsLastVisit={handleSetTodayAsLastVisit} />
+                            <TableView groupedDoctors={groupedDoctors} structures={structures} alertDays={alertDays} onDoctorDoubleClick={handleOpenDoctorModal} onSetTodayAsLastVisit={handleSetTodayAsLastVisit} />
                         </>
                     )}
                     {activeTab === 'strutture' && (

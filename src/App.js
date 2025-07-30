@@ -5,10 +5,7 @@ import {
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
     signOut,
-    onAuthStateChanged,
-    signInWithCustomToken,
-    setPersistence,
-    browserLocalPersistence
+    onAuthStateChanged
 } from 'firebase/auth';
 import {
     getFirestore,
@@ -33,7 +30,6 @@ const firebaseConfig = {
     appId: process.env.REACT_APP_FIREBASE_APP_ID
 };
 
-const appId = typeof window.__app_id !== 'undefined' ? window.__app_id : 'default-app-id';
 
 // --- COMPONENTE AUTENTICAZIONE ---
 const AuthPage = ({ onLogin, onRegister, setAuthError, authError }) => {
@@ -91,8 +87,8 @@ const AuthPage = ({ onLogin, onRegister, setAuthError, authError }) => {
 };
 
 
-// --- COMPONENTE VISTA RAGGRUPPATA PER STRUTTURA ---
-const GroupedTableView = ({ groupedDoctors, structures, alertDays, onDoctorDoubleClick, onSetTodayAsLastVisit, sortConfig }) => {
+// --- COMPONENTE VISTA TABELLARE ---
+const TableView = ({ doctors, structures, alertDays, onDoctorDoubleClick, onSetTodayAsLastVisit }) => {
     const daysOfWeek = ['lunedi', 'martedi', 'mercoledi', 'giovedi', 'venerdi', 'sabato', 'domenica'];
 
     const getVisitAlert = (lastVisitDate) => {
@@ -114,7 +110,7 @@ const GroupedTableView = ({ groupedDoctors, structures, alertDays, onDoctorDoubl
         return <div className="w-4 h-4 bg-green-500 rounded-full flex-shrink-0" title={`Ultima visita ${diffDays} giorni fa`}></div>;
     };
 
-    const getShiftAndStructure = (timeString, doctorStructureIds) => {
+    const getShiftAndStructure = (timeString, structureIds) => {
         if (!timeString || !timeString.trim()) return null;
         const slots = timeString.split('/').map(s => s.trim());
         let morning = false, afternoon = false;
@@ -122,7 +118,7 @@ const GroupedTableView = ({ groupedDoctors, structures, alertDays, onDoctorDoubl
             const startHour = parseInt(slot.split('-')[0], 10);
             if (!isNaN(startHour)) { if (startHour < 14) morning = true; else afternoon = true; }
         });
-        const associatedStructures = doctorStructureIds?.map(id => structures.find(s => s.id === id)?.name).filter(Boolean).join(', ');
+        const associatedStructures = structureIds?.map(id => structures.find(s => s.id === id)?.name).filter(Boolean).join(', ');
         return (
             <div className="flex flex-col items-center justify-center gap-1">
                 <div className="flex items-center justify-center gap-1.5 flex-wrap">
@@ -133,30 +129,11 @@ const GroupedTableView = ({ groupedDoctors, structures, alertDays, onDoctorDoubl
             </div>
         );
     };
-    
-    const renderTableForGroup = (doctorsInGroup) => {
-        if (doctorsInGroup.length === 0) return null;
 
-        const sortedDoctors = [...doctorsInGroup].sort((a, b) => {
-            if (sortConfig.key === null) return 0;
-            let aValue = a[sortConfig.key];
-            let bValue = b[sortConfig.key];
-            
-            if (sortConfig.key === 'structure') {
-                const getFirstName = (ids) => ids?.map(id => structures.find(s => s.id === id)?.name).filter(Boolean)[0] || '';
-                aValue = getFirstName(a.structureIds);
-                bValue = getFirstName(b.structureIds);
-            }
-
-            if (!aValue) return 1; if (!bValue) return -1;
-            if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
-            if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
-            return 0;
-        });
-
-        return (
-             <div className="overflow-x-auto">
-                <table className="w-full min-w-[1200px] text-left text-sm text-gray-300">
+    return (
+        <div className="bg-gray-800 p-4 sm:p-6 rounded-xl shadow-lg">
+            <div className="overflow-x-auto">
+                 <table className="w-full min-w-[1200px] text-left text-sm text-gray-300">
                     <thead className="bg-gray-700 text-xs text-gray-400 uppercase tracking-wider">
                         <tr>
                             <th scope="col" className="px-6 py-3 rounded-l-lg w-1/5">Medico</th>
@@ -166,7 +143,7 @@ const GroupedTableView = ({ groupedDoctors, structures, alertDays, onDoctorDoubl
                         </tr>
                     </thead>
                     <tbody>
-                        {sortedDoctors.map(doctor => (
+                        {doctors.map(doctor => (
                             <tr key={doctor.id} onDoubleClick={() => onDoctorDoubleClick(doctor)} className="bg-gray-800 border-b border-gray-700 hover:bg-gray-700/50 transition-colors cursor-pointer">
                                 <td className="px-6 py-4 font-medium text-white whitespace-nowrap">
                                     <div className="flex items-center justify-between gap-3">
@@ -194,31 +171,6 @@ const GroupedTableView = ({ groupedDoctors, structures, alertDays, onDoctorDoubl
                     </tbody>
                 </table>
             </div>
-        );
-    };
-
-    const structureOrder = structures.map(s => s.id);
-    const allGroupIds = [...structureOrder, 'unassigned'];
-
-    return (
-        <div className="space-y-8">
-            {allGroupIds.map(structureId => {
-                const doctorsInGroup = groupedDoctors[structureId] || [];
-                if (doctorsInGroup.length === 0) return null;
-
-                const structure = structures.find(s => s.id === structureId);
-                const groupTitle = structure ? structure.name : "Medici non assegnati a una struttura";
-
-                return (
-                    <div key={structureId} className="bg-gray-800 p-4 sm:p-6 rounded-xl shadow-lg">
-                        <h2 className="text-2xl font-bold text-cyan-400 mb-4 flex items-center gap-3">
-                            {structure ? <Building size={24} /> : <UserPlus size={24} />}
-                            {groupTitle}
-                        </h2>
-                        {renderTableForGroup(doctorsInGroup)}
-                    </div>
-                );
-            })}
         </div>
     );
 };
@@ -266,16 +218,16 @@ const DoctorModal = ({ isOpen, onClose, onSave, onDelete, structures, initialDat
                     </div>
                 </div>
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid md:grid-cols-2 gap-4"><input name="firstName" placeholder="Nome (es. Dott.)" value={doctorData.firstName} onChange={handleChange} className="bg-gray-700 p-3 rounded-lg text-white" /><input name="lastName" placeholder="Cognome" value={doctorData.lastName} onChange={handleChange} className="bg-gray-700 p-3 rounded-lg text-white" /></div>
-                    <input name="dateOfBirth" type="date" value={doctorData.dateOfBirth} onChange={handleChange} className="w-full bg-gray-700 p-3 rounded-lg text-white" />
-                    <div><h3 className="text-lg font-semibold mb-2">Strutture Associate</h3><div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{structures.map(s => (<label key={s.id} className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer ${doctorData.structureIds.includes(s.id) ? 'bg-cyan-600' : 'bg-gray-700'}`}><input type="checkbox" checked={doctorData.structureIds.includes(s.id)} onChange={() => handleStructureSelection(s.id)} className="form-checkbox h-5 w-5 text-cyan-500 bg-gray-900 border-gray-700 rounded focus:ring-cyan-600" /><span>{s.name}</span></label>))}</div></div>
-                    <div><h3 className="text-lg font-semibold my-2">Ultima Visita (doppio click per oggi)</h3><input name="lastVisit" type="date" value={doctorData.lastVisit} onChange={handleChange} onDoubleClick={handleDateDoubleClick} className="w-full bg-gray-700 p-3 rounded-lg text-white" /></div>
-                    <div><h3 className="text-lg font-semibold my-2">Data Appuntamento</h3><input name="appointmentDate" type="date" value={doctorData.appointmentDate} onChange={handleChange} className="w-full bg-gray-700 p-3 rounded-lg text-white" /></div>
-                    <div><h3 className="text-lg font-semibold my-2">Note</h3><textarea name="notes" placeholder="Note aggiuntive..." value={doctorData.notes} onChange={handleChange} className="w-full bg-gray-700 p-3 rounded-lg text-white" rows="3"></textarea></div>
-                    <div><h3 className="text-lg font-semibold mb-2 flex items-center gap-2"><Clock size={20}/> Orari</h3><div className="grid sm:grid-cols-2 gap-4">{Object.keys(doctorData.availability).map(day => (<div key={day}><label className="capitalize text-gray-400">{day}</label><input type="text" placeholder="Es. 9-12 / 15-18" value={doctorData.availability[day]} onChange={(e) => handleAvailabilityChange(day, e.target.value)} className="w-full mt-1 bg-gray-700 p-2 rounded-lg text-white" /></div>))}</div></div>
+                    <div className="grid md:grid-cols-2 gap-4"><input name="firstName" placeholder="Nome (es. Dott.)" value={doctorData.firstName} onChange={handleChange} className="bg-gray-700 p-3 rounded-lg" /><input name="lastName" placeholder="Cognome" value={doctorData.lastName} onChange={handleChange} className="bg-gray-700 p-3 rounded-lg" /></div>
+                    <input name="dateOfBirth" type="date" value={doctorData.dateOfBirth} onChange={handleChange} className="w-full bg-gray-700 p-3 rounded-lg" />
+                    <div><h3 className="text-lg font-semibold mb-2">Strutture Associate</h3><div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{structures.map(s => (<label key={s.id} className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer ${doctorData.structureIds.includes(s.id) ? 'bg-cyan-600' : 'bg-gray-700'}`}><input type="checkbox" checked={doctorData.structureIds.includes(s.id)} onChange={() => handleStructureSelection(s.id)} className="form-checkbox h-5 w-5 text-cyan-500" /><span>{s.name}</span></label>))}</div></div>
+                    <div><h3 className="text-lg font-semibold my-2">Ultima Visita (doppio click per oggi)</h3><input name="lastVisit" type="date" value={doctorData.lastVisit} onChange={handleChange} onDoubleClick={handleDateDoubleClick} className="w-full bg-gray-700 p-3 rounded-lg" /></div>
+                    <div><h3 className="text-lg font-semibold my-2">Data Appuntamento</h3><input name="appointmentDate" type="date" value={doctorData.appointmentDate} onChange={handleChange} className="w-full bg-gray-700 p-3 rounded-lg" /></div>
+                    <div><h3 className="text-lg font-semibold my-2">Note</h3><textarea name="notes" placeholder="Note aggiuntive..." value={doctorData.notes} onChange={handleChange} className="w-full bg-gray-700 p-3 rounded-lg" rows="3"></textarea></div>
+                    <div><h3 className="text-lg font-semibold mb-2 flex items-center gap-2"><Clock size={20}/> Orari</h3><div className="grid sm:grid-cols-2 gap-4">{Object.keys(doctorData.availability).map(day => (<div key={day}><label className="capitalize text-gray-400">{day}</label><input type="text" placeholder="Es. 9-12 / 15-18" value={doctorData.availability[day]} onChange={(e) => handleAvailabilityChange(day, e.target.value)} className="w-full mt-1 bg-gray-700 p-2 rounded-lg" /></div>))}</div></div>
                     <div className="flex justify-between items-center gap-4 pt-4">
-                        <div>{isEditMode && <button type="button" onClick={handleDeleteClick} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2"><Trash2 size={18} /> Elimina</button>}</div>
-                        <div className="flex gap-4"><button type="button" onClick={onClose} className="bg-gray-600 font-bold py-2 px-4 rounded-lg">Annulla</button><button type="submit" className="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2"><Save size={18}/> Salva</button></div>
+                         <div>{isEditMode && <button type="button" onClick={handleDeleteClick} className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2"><Trash2 size={18} /> Elimina</button>}</div>
+                        <div className="flex gap-4"><button type="button" onClick={onClose} className="bg-gray-600 font-bold py-2 px-4 rounded-lg">Annulla</button><button type="submit" className="bg-cyan-500 font-bold py-2 px-4 rounded-lg flex items-center gap-2"><Save size={18}/> Salva</button></div>
                     </div>
                 </form>
             </div>
@@ -300,9 +252,9 @@ const StructureModal = ({ isOpen, onClose, onSave, initialData }) => {
             <div className="bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-lg">
                 <div className="flex justify-between items-center mb-6"><h2 className="text-2xl font-bold text-cyan-400">{isEditMode ? 'Modifica Struttura' : 'Nuova Struttura'}</h2><button onClick={onClose} className="text-gray-400 hover:text-white"><X size={28}/></button></div>
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    <div><label className="text-lg font-semibold mb-2">Nome Struttura</label><input name="name" placeholder="Nome della struttura" value={structureData.name} onChange={handleChange} className="w-full mt-1 bg-gray-700 p-3 rounded-lg text-white" /></div>
-                    <div><label className="text-lg font-semibold mb-2">Indirizzo</label><input name="address" placeholder="Indirizzo completo" value={structureData.address} onChange={handleChange} className="w-full mt-1 bg-gray-700 p-3 rounded-lg text-white" /></div>
-                    <div className="flex justify-end gap-4 pt-4"><button type="button" onClick={onClose} className="bg-gray-600 font-bold py-2 px-4 rounded-lg">Annulla</button><button type="submit" className="bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2"><Save size={18}/> Salva</button></div>
+                    <div><label className="text-lg font-semibold mb-2">Nome Struttura</label><input name="name" placeholder="Nome della struttura" value={structureData.name} onChange={handleChange} className="w-full mt-1 bg-gray-700 p-3 rounded-lg" /></div>
+                    <div><label className="text-lg font-semibold mb-2">Indirizzo</label><input name="address" placeholder="Indirizzo completo" value={structureData.address} onChange={handleChange} className="w-full mt-1 bg-gray-700 p-3 rounded-lg" /></div>
+                    <div className="flex justify-end gap-4 pt-4"><button type="button" onClick={onClose} className="bg-gray-600 font-bold py-2 px-4 rounded-lg">Annulla</button><button type="submit" className="bg-cyan-500 font-bold py-2 px-4 rounded-lg flex items-center gap-2"><Save size={18}/> Salva</button></div>
                 </form>
             </div>
         </div>
@@ -364,9 +316,10 @@ const App = () => {
     // --- INIZIALIZZAZIONE FIREBASE E AUTH ---
     useEffect(() => {
         try {
+            // Verifica che le chiavi non siano i placeholder
             if (firebaseConfig.apiKey === "YOUR_API_KEY") {
                  console.error("Configurazione Firebase non valida. Sostituisci i placeholder in firebaseConfig.");
-                 setAuthError("Configurazione Firebase mancante. L'app non può funzionare.");
+                 setAuthError("Configurazione Firebase mancante. Controlla la console per i dettagli.");
                  setIsLoading(false);
                  return;
             }
@@ -375,21 +328,6 @@ const App = () => {
             const firebaseAuth = getAuth(app);
             setDb(firestoreDb);
             setAuth(firebaseAuth);
-
-            setPersistence(firebaseAuth, browserLocalPersistence)
-                .then(async () => {
-                    const initialAuthToken = typeof window.__initial_auth_token !== 'undefined' ? window.__initial_auth_token : null;
-                    if (initialAuthToken) {
-                        try {
-                            await signInWithCustomToken(firebaseAuth, initialAuthToken);
-                        } catch (error) {
-                            console.error("Errore di accesso con token personalizzato:", error);
-                        }
-                    }
-                })
-                .catch((error) => {
-                    console.error("Errore nell'impostare la persistenza:", error);
-                });
 
             const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
                 setUser(user);
@@ -411,17 +349,17 @@ const App = () => {
             return;
         }
 
-        const doctorsQuery = collection(db, 'artifacts', appId, 'users', user.uid, 'doctors');
+        const doctorsQuery = collection(db, 'users', user.uid, 'doctors');
         const unsubDoctors = onSnapshot(doctorsQuery, snap => setDoctors(snap.docs.map(d => ({ id: d.id, ...d.data() }))), err => console.error("Errore fetch medici:", err));
 
-        const structuresQuery = collection(db, 'artifacts', appId, 'users', user.uid, 'structures');
-        const unsubStructures = onSnapshot(structuresQuery, snap => setStructures(snap.docs.map(s => ({ id: s.id, ...s.data() })).sort((a, b) => a.name.localeCompare(b.name))), err => console.error("Errore fetch strutture:", err));
+        const structuresQuery = collection(db, 'users', user.uid, 'structures');
+        const unsubStructures = onSnapshot(structuresQuery, snap => setStructures(snap.docs.map(s => ({ id: s.id, ...s.data() }))), err => console.error("Errore fetch strutture:", err));
 
         return () => {
             unsubDoctors();
             unsubStructures();
         };
-    }, [user, db, appId]);
+    }, [user, db]);
 
     // --- FUNZIONI DI AUTENTICAZIONE ---
     const handleRegister = (email, password) => {
@@ -437,8 +375,8 @@ const App = () => {
         signOut(auth);
     };
 
-    // --- LOGICA DI FILTRAGGIO E RAGGRUPPAMENTO ---
-    const groupedAndFilteredDoctors = React.useMemo(() => {
+    // --- LOGICA DI FILTRAGGIO E ORDINAMENTO ---
+    const processedDoctors = React.useMemo(() => {
         let items = [...doctors];
 
         if (searchQuery) items = items.filter(doctor => `${doctor.firstName} ${doctor.lastName}`.toLowerCase().includes(searchQuery.toLowerCase()));
@@ -469,25 +407,23 @@ const App = () => {
                 return diffDays > alertDays.yellow;
             });
         }
-        
-        // Raggruppamento
-        const grouped = { unassigned: [] };
-        structures.forEach(s => { grouped[s.id] = []; });
-
-        items.forEach(doctor => {
-            if (doctor.structureIds && doctor.structureIds.length > 0) {
-                doctor.structureIds.forEach(id => {
-                    if (grouped[id]) {
-                        grouped[id].push(doctor);
-                    }
-                });
-            } else {
-                grouped.unassigned.push(doctor);
-            }
-        });
-
-        return grouped;
-    }, [doctors, structures, filterAlertsOnly, alertDays, searchQuery, dayFilter, structureFilter, filterUpcoming]);
+        if (sortConfig.key !== null) {
+            items.sort((a, b) => {
+                let aValue = a[sortConfig.key];
+                let bValue = b[sortConfig.key];
+                if (sortConfig.key === 'structure') {
+                    const getFirstName = (ids) => ids?.map(id => structures.find(s => s.id === id)?.name).filter(Boolean)[0] || '';
+                    aValue = getFirstName(a.structureIds);
+                    bValue = getFirstName(b.structureIds);
+                }
+                if (!aValue) return 1; if (!bValue) return -1;
+                if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+                if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+        return items;
+    }, [doctors, sortConfig, structures, filterAlertsOnly, alertDays, searchQuery, dayFilter, structureFilter, filterUpcoming]);
 
     const requestSort = (key) => {
         let direction = 'asc';
@@ -507,7 +443,7 @@ const App = () => {
         if (!user || !db) return;
         try {
             const today = new Date().toISOString().split('T')[0];
-            const doctorRef = doc(db, 'artifacts', appId, 'users', user.uid, 'doctors', doctorId);
+            const doctorRef = doc(db, `users/${user.uid}/doctors`, doctorId);
             await setDoc(doctorRef, { lastVisit: today }, { merge: true });
         } catch (error) {
             console.error("Errore nell'aggiornare la data dell'ultima visita:", error);
@@ -521,24 +457,12 @@ const App = () => {
             return; 
         }
         try {
-            const path = collection(db, 'artifacts', appId, 'users', user.uid, 'doctors');
-            const dataToSave = {
-                ...doctorData,
-                firstName: doctorData.firstName || '',
-                lastName: doctorData.lastName || '',
-                dateOfBirth: doctorData.dateOfBirth || '',
-                structureIds: doctorData.structureIds || [],
-                availability: doctorData.availability || { lunedi: '', martedi: '', mercoledi: '', giovedi: '', venerdi: '', sabato: '', domenica: '' },
-                notes: doctorData.notes || '',
-                lastVisit: doctorData.lastVisit || '',
-                appointmentDate: doctorData.appointmentDate || ''
-            };
-
+            const path = `users/${user.uid}/doctors`;
             if (doctorData.id) {
-                const { id, ...finalData } = dataToSave;
-                await setDoc(doc(path, id), finalData);
+                const { id, ...dataToSave } = doctorData;
+                await setDoc(doc(db, path, id), dataToSave);
             } else {
-                await addDoc(path, dataToSave);
+                await addDoc(collection(db, path), doctorData);
             }
             handleCloseDoctorModal();
         } catch (error) { console.error("Error saving doctor", error); }
@@ -548,7 +472,7 @@ const App = () => {
         if (!user || !db) return;
         const confirmDelete = async () => {
             try {
-                await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'doctors', id));
+                await deleteDoc(doc(db, `users/${user.uid}/doctors`, id));
                 handleCloseDoctorModal();
             } catch (error) { console.error("Error deleting doctor:", error); }
             finally { setModalState({ isOpen: false }); }
@@ -564,12 +488,12 @@ const App = () => {
             return; 
         }
         try {
-            const path = collection(db, 'artifacts', appId, 'users', user.uid, 'structures');
+            const path = `users/${user.uid}/structures`;
             if (structureData.id) {
                 const { id, ...dataToSave } = structureData;
-                await setDoc(doc(path, id), dataToSave);
+                await setDoc(doc(db, path, id), dataToSave);
             } else {
-                await addDoc(path, structureData);
+                await addDoc(collection(db, path), structureData);
             }
             handleCloseStructureModal();
         } catch (error) { console.error("Error saving structure:", error); }
@@ -579,19 +503,16 @@ const App = () => {
         if (!user || !db) return;
         const confirmDelete = async () => {
              try {
+                const path = `users/${user.uid}/structures`;
+                const doctorsPath = `users/${user.uid}/doctors`;
                 const batch = writeBatch(db);
                 const doctorsToUpdate = doctors.filter(d => d.structureIds?.includes(id));
-                
                 doctorsToUpdate.forEach(d => {
                     const newIds = d.structureIds.filter(sid => sid !== id);
-                    const doctorRef = doc(db, 'artifacts', appId, 'users', user.uid, 'doctors', d.id);
-                    batch.update(doctorRef, { structureIds: newIds });
+                    batch.update(doc(db, doctorsPath, d.id), { structureIds: newIds });
                 });
-                
                 await batch.commit();
-                
-                const structureRef = doc(db, 'artifacts', appId, 'users', user.uid, 'structures', id);
-                await deleteDoc(structureRef);
+                await deleteDoc(doc(db, path, id));
             } catch (error) { console.error(error); }
             finally { setModalState({ isOpen: false }); }
         };
@@ -601,13 +522,9 @@ const App = () => {
 
     // --- FUNZIONI IMPORT/EXPORT ---
     const handleExport = () => { 
-        const dataToExport = {
-            doctors: doctors,
-            structures: structures
-        };
         const link = document.createElement("a"); 
-        link.href = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify(dataToExport, null, 2))}`; 
-        link.download = `gestionale_medici_backup_${new Date().toISOString().split('T')[0]}.json`; 
+        link.href = `data:text/json;charset=utf-8,${encodeURIComponent(JSON.stringify({ doctors, structures }, null, 2))}`; 
+        link.download = "gestionale_medici_backup.json"; 
         link.click(); 
     };
 
@@ -624,31 +541,20 @@ const App = () => {
                     if (!data.doctors || !data.structures) throw new Error("File format invalid");
                     setIsLoading(true);
                     const batch = writeBatch(db);
-                    const doctorsPath = collection(db, 'artifacts', appId, 'users', user.uid, 'doctors');
-                    const structuresPath = collection(db, 'artifacts', appId, 'users', user.uid, 'structures');
-                    
+                    const doctorsPath = collection(db, 'users', user.uid, 'doctors');
+                    const structuresPath = collection(db, 'users', user.uid, 'structures');
                     const existingDocs = await getDocs(doctorsPath);
                     existingDocs.forEach(d => batch.delete(d.ref));
                     const existingStructs = await getDocs(structuresPath);
                     existingStructs.forEach(s => batch.delete(s.ref));
-                    
-                    // Restore structures from backup, preserving IDs
-                    (data.structures || []).forEach(s => {
+                    data.structures.forEach(s => {
                         const { id, ...structData } = s;
-                        const docRef = id ? doc(structuresPath, id) : doc(structuresPath);
-                        batch.set(docRef, structData);
+                        batch.set(doc(structuresPath, id || undefined), structData);
                     });
-                    
-                    // Restore doctors from backup, preserving IDs
-                    (data.doctors || []).forEach(d => {
+                    data.doctors.forEach(d => {
                         const { id, ...docData } = d;
-                        const docRef = id ? doc(doctorsPath, id) : doc(doctorsPath);
-                        const newDoc = {
-                            notes: '', lastVisit: '', appointmentDate: '', ...docData
-                        };
-                        batch.set(docRef, newDoc);
+                        batch.set(doc(doctorsPath), { notes: '', lastVisit: '', appointmentDate: '', ...docData });
                     });
-                    
                     await batch.commit();
                 } catch (err) {
                     console.error(err);
@@ -662,24 +568,15 @@ const App = () => {
         };
         
         if (!user || !db) return;
-        setModalState({ isOpen: true, title: 'Conferma Importazione', message: "Sei sicuro? L'importazione sovrascriverà tutti i dati attuali.", onConfirm: confirmImport, onCancel: () => { event.target.value = null; setModalState({isOpen: false}); } });
+        setModalState({isOpen: true, title: 'Conferma Importazione', message: "Sei sicuro? L'importazione sovrascriverà tutti i dati attuali.", onConfirm: confirmImport, onCancel: () => { event.target.value = null; setModalState({isOpen: false}); } });
     };
 
-    if (isLoading) return <div className="flex items-center justify-center h-screen bg-gray-900 text-white">Caricamento in corso...</div>;
+    if (isLoading) return <div className="flex items-center justify-center h-screen bg-gray-900 text-white">Caricamento...</div>;
 
     if (!user) return <AuthPage onLogin={handleLogin} onRegister={handleRegister} setAuthError={setAuthError} authError={authError} />;
 
     return (
         <div className="bg-gray-900 text-white min-h-screen font-sans p-4 sm:p-6 md:p-8">
-            <style>{`
-                /* Stile per la scrollbar */
-                ::-webkit-scrollbar { width: 12px; }
-                ::-webkit-scrollbar-track { background: #2d3748; }
-                ::-webkit-scrollbar-thumb { background-color: #4a5568; border-radius: 20px; border: 3px solid #2d3748; }
-                ::-webkit-scrollbar-thumb:hover { background: #718096; }
-                /* Stili per input date */
-                input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.8); cursor: pointer; }
-            `}</style>
             <ConfirmationModal 
                 isOpen={modalState.isOpen}
                 title={modalState.title}
@@ -696,7 +593,7 @@ const App = () => {
                             <h1 className="text-4xl font-bold text-cyan-400">Gestionale Medici</h1>
                             <p className="text-gray-400 mt-2">Utente: {user.email}</p>
                         </div>
-                        <div className="flex items-center gap-2 flex-wrap">
+                        <div className="flex items-center gap-2">
                             <input type="file" id="import-file" className="hidden" accept=".json" onChange={handleImport} />
                             <label htmlFor="import-file" className="inline-flex items-center gap-2 bg-gray-700 hover:bg-gray-600 font-bold py-2 px-4 rounded-lg cursor-pointer"><Upload size={18} /> Importa</label>
                             <button onClick={handleExport} className="inline-flex items-center gap-2 bg-cyan-500 hover:bg-cyan-600 font-bold py-2 px-4 rounded-lg"><Download size={18} /> Esporta</button>
@@ -714,35 +611,28 @@ const App = () => {
                                 <button onClick={() => handleOpenDoctorModal()} className="lg:col-span-1 inline-flex items-center justify-center gap-2 bg-cyan-500 hover:bg-cyan-600 text-white font-bold py-2 px-4 rounded-lg shadow-lg"><UserPlus size={20} /> Aggiungi Medico</button>
                                 <div className="relative lg:col-span-2">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20}/>
-                                    <input type="text" placeholder="Cerca medico..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-gray-700 p-3 pl-10 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 text-white"/>
+                                    <input type="text" placeholder="Cerca medico..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-gray-700 p-3 pl-10 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500"/>
                                 </div>
                             </div>
                             <div className="flex flex-wrap items-center justify-center gap-4 text-sm mb-6 bg-gray-800/50 p-4 rounded-lg">
-                                <div className="flex items-center gap-2"><span className="font-semibold">Ordina per:</span><button onClick={() => requestSort('lastName')} className={`px-3 py-1 rounded-full ${sortConfig.key === 'lastName' ? 'bg-cyan-600' : 'bg-gray-700'}`}>Nome</button><button onClick={() => requestSort('lastVisit')} className={`px-3 py-1 rounded-full ${sortConfig.key === 'lastVisit' ? 'bg-cyan-600' : 'bg-gray-700'}`}>Ultima Visita</button></div>
-                                <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={filterAlertsOnly} onChange={() => setFilterAlertsOnly(!filterAlertsOnly)} className="form-checkbox h-5 w-5 text-cyan-500 bg-gray-900 border-gray-600 rounded focus:ring-cyan-600"/><span className="flex items-center gap-1"><Filter size={14}/> Solo con alert</span></label>
-                                <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={filterUpcoming} onChange={() => setFilterUpcoming(!filterUpcoming)} className="form-checkbox h-5 w-5 text-cyan-500 bg-gray-900 border-gray-600 rounded focus:ring-cyan-600"/><span className="flex items-center gap-1"><CalendarPlus size={14}/> App. prossimi 7 gg</span></label>
-                                <div className="flex items-center gap-2"><label className="font-semibold" htmlFor="day-filter">Giorno:</label><select id="day-filter" value={dayFilter} onChange={(e) => setDayFilter(e.target.value)} className="bg-gray-700 text-white p-2 rounded-md border border-gray-600"><option value="">Qualsiasi</option><option value="lunedi">Lunedì</option><option value="martedi">Martedì</option><option value="mercoledi">Mercoledì</option><option value="giovedi">Giovedì</option><option value="venerdi">Venerdì</option><option value="sabato">Sabato</option><option value="domenica">Domenica</option></select></div>
-                                <div className="relative"><button onClick={() => setIsStructureDropdownOpen(!isStructureDropdownOpen)} className="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded-md border border-gray-600">Filtra per Struttura <ChevronDown size={16}/></button>
+                                 <div className="flex items-center gap-2"><span className="font-semibold">Ordina per:</span><button onClick={() => requestSort('lastName')} className={`px-3 py-1 rounded-full ${sortConfig.key === 'lastName' ? 'bg-cyan-600' : 'bg-gray-700'}`}>Nome</button><button onClick={() => requestSort('lastVisit')} className={`px-3 py-1 rounded-full ${sortConfig.key === 'lastVisit' ? 'bg-cyan-600' : 'bg-gray-700'}`}>Ultima Visita</button></div>
+                                 <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={filterAlertsOnly} onChange={() => setFilterAlertsOnly(!filterAlertsOnly)} className="form-checkbox h-5 w-5 text-cyan-500 bg-gray-900 border-gray-600 rounded focus:ring-cyan-600"/><span className="flex items-center gap-1"><Filter size={14}/> Solo con alert</span></label>
+                                 <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={filterUpcoming} onChange={() => setFilterUpcoming(!filterUpcoming)} className="form-checkbox h-5 w-5 text-cyan-500 bg-gray-900 border-gray-600 rounded focus:ring-cyan-600"/><span className="flex items-center gap-1"><CalendarPlus size={14}/> App. prossimi 7 gg</span></label>
+                                 <div className="flex items-center gap-2"><label className="font-semibold" htmlFor="day-filter">Giorno:</label><select id="day-filter" value={dayFilter} onChange={(e) => setDayFilter(e.target.value)} className="bg-gray-700 text-white p-2 rounded-md"><option value="">Qualsiasi</option><option value="lunedi">Lunedì</option><option value="martedi">Martedì</option><option value="mercoledi">Mercoledì</option><option value="giovedi">Giovedì</option><option value="venerdi">Venerdì</option><option value="sabato">Sabato</option><option value="domenica">Domenica</option></select></div>
+                                 <div className="relative"><button onClick={() => setIsStructureDropdownOpen(!isStructureDropdownOpen)} className="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded-md">Filtra per Struttura <ChevronDown size={16}/></button>
                                     {isStructureDropdownOpen && (<div className="absolute top-full mt-2 w-56 bg-gray-600 rounded-md shadow-lg z-10 p-2">
                                         <button onClick={() => setStructureFilter([])} className="w-full text-left p-1.5 rounded-md hover:bg-gray-500 font-semibold mb-1">Tutte le strutture</button>
                                         <hr className="border-gray-500 mb-1"/>
-                                        {structures.map(s => (<label key={s.id} className="flex items-center gap-2 p-1.5 rounded-md hover:bg-gray-500 cursor-pointer"><input type="checkbox" checked={structureFilter.includes(s.id)} onChange={() => handleStructureFilterChange(s.id)} className="form-checkbox h-4 w-4 text-cyan-500 bg-gray-800 border-gray-500 rounded focus:ring-cyan-600"/>{s.name}</label>))}
+                                        {structures.map(s => (<label key={s.id} className="flex items-center gap-2 p-1.5 rounded-md hover:bg-gray-500 cursor-pointer"><input type="checkbox" checked={structureFilter.includes(s.id)} onChange={() => handleStructureFilterChange(s.id)} className="form-checkbox h-4 w-4 text-cyan-500"/>{s.name}</label>))}
                                     </div>)}
                                 </div>
                             </div>
                              <div className="bg-gray-800/50 p-4 rounded-lg mb-6 flex items-center justify-center flex-wrap gap-x-6 gap-y-3">
                                 <h3 className="text-lg font-semibold text-cyan-400 flex items-center gap-2"><AlertCircle size={20} /> Impostazioni Alert</h3>
-                                <div className="flex items-center gap-2"><label htmlFor="yellow-days" className="text-sm text-yellow-300">Giallo (giorni):</label><input type="number" id="yellow-days" value={alertDays.yellow} onChange={(e) => setAlertDays(p => ({ ...p, yellow: Number(e.target.value) || 0 }))} className="bg-gray-700 w-20 p-2 rounded-md text-white border border-gray-600"/></div>
-                                <div className="flex items-center gap-2"><label htmlFor="red-days" className="text-sm text-red-300">Rosso (giorni):</label><input type="number" id="red-days" value={alertDays.red} onChange={(e) => setAlertDays(p => ({ ...p, red: Number(e.target.value) || 0 }))} className="bg-gray-700 w-20 p-2 rounded-md text-white border border-gray-600"/></div>
+                                <div className="flex items-center gap-2"><label htmlFor="yellow-days" className="text-sm text-yellow-300">Giallo (giorni):</label><input type="number" id="yellow-days" value={alertDays.yellow} onChange={(e) => setAlertDays(p => ({ ...p, yellow: Number(e.target.value) || 0 }))} className="bg-gray-700 w-20 p-2 rounded-md"/></div>
+                                <div className="flex items-center gap-2"><label htmlFor="red-days" className="text-sm text-red-300">Rosso (giorni):</label><input type="number" id="red-days" value={alertDays.red} onChange={(e) => setAlertDays(p => ({ ...p, red: Number(e.target.value) || 0 }))} className="bg-gray-700 w-20 p-2 rounded-md"/></div>
                             </div>
-                            <GroupedTableView 
-                                groupedDoctors={groupedAndFilteredDoctors} 
-                                structures={structures} 
-                                alertDays={alertDays} 
-                                onDoctorDoubleClick={handleOpenDoctorModal} 
-                                onSetTodayAsLastVisit={handleSetTodayAsLastVisit}
-                                sortConfig={sortConfig}
-                            />
+                            <TableView doctors={processedDoctors} structures={structures} alertDays={alertDays} onDoctorDoubleClick={handleOpenDoctorModal} onSetTodayAsLastVisit={handleSetTodayAsLastVisit} />
                         </>
                     )}
                     {activeTab === 'strutture' && (

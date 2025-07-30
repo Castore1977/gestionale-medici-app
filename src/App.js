@@ -2,10 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { initializeApp } from 'firebase/app';
 import {
     getAuth,
-    createUserWithEmailAndPassword,
-    signInWithEmailAndPassword,
     signOut,
-    onAuthStateChanged
+    onAuthStateChanged,
+    signInWithCustomToken,
+    signInAnonymously
 } from 'firebase/auth';
 import {
     getFirestore,
@@ -20,6 +20,7 @@ import {
 } from 'firebase/firestore';
 import { Plus, Trash2, Building, UserPlus, Save, X, Clock, Sun, Moon, Upload, Download, AlertCircle, Filter, Edit, Search, ChevronDown, LogOut, CalendarPlus } from 'lucide-react';
 
+
 // --- CONFIGURAZIONE FIREBASE ---
 const firebaseConfig = {
     apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
@@ -31,64 +32,8 @@ const firebaseConfig = {
 };
 
 
-// --- COMPONENTE AUTENTICAZIONE ---
-const AuthPage = ({ onLogin, onRegister, setAuthError, authError }) => {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [isLogin, setIsLogin] = useState(true);
-
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        setAuthError('');
-        if (isLogin) {
-            onLogin(email, password);
-        } else {
-            onRegister(email, password);
-        }
-    };
-
-    return (
-        <div className="flex items-center justify-center min-h-screen bg-gray-900">
-            <div className="w-full max-w-md p-8 space-y-8 bg-gray-800 rounded-xl shadow-lg">
-                <h2 className="text-3xl font-bold text-center text-cyan-400">
-                    {isLogin ? 'Accedi al Gestionale' : 'Registra un Nuovo Account'}
-                </h2>
-                <form onSubmit={handleSubmit} className="space-y-6">
-                    <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder="Indirizzo Email"
-                        required
-                        className="w-full px-4 py-2 text-white bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                    />
-                    <input
-                        type="password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        placeholder="Password"
-                        required
-                        className="w-full px-4 py-2 text-white bg-gray-700 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                    />
-                     {authError && <p className="text-red-400 text-sm">{authError}</p>}
-                    <button type="submit" className="w-full px-4 py-2 font-bold text-white bg-cyan-600 rounded-md hover:bg-cyan-700 transition-colors">
-                        {isLogin ? 'Accedi' : 'Registrati'}
-                    </button>
-                </form>
-                <p className="text-sm text-center text-gray-400">
-                    {isLogin ? "Non hai un account? " : "Hai già un account? "}
-                    <button onClick={() => { setIsLogin(!isLogin); setAuthError(''); }} className="font-medium text-cyan-400 hover:underline">
-                        {isLogin ? 'Registrati' : 'Accedi'}
-                    </button>
-                </p>
-            </div>
-        </div>
-    );
-};
-
-
-// --- COMPONENTE VISTA TABELLARE ---
-const TableView = ({ doctors, structures, alertDays, onDoctorDoubleClick, onSetTodayAsLastVisit }) => {
+// --- COMPONENTE VISTA TABELLARE (MODIFICATO) ---
+const TableView = ({ groupedData, structures, alertDays, onDoctorDoubleClick, onSetTodayAsLastVisit }) => {
     const daysOfWeek = ['lunedi', 'martedi', 'mercoledi', 'giovedi', 'venerdi', 'sabato', 'domenica'];
 
     const getVisitAlert = (lastVisitDate) => {
@@ -143,30 +88,47 @@ const TableView = ({ doctors, structures, alertDays, onDoctorDoubleClick, onSetT
                         </tr>
                     </thead>
                     <tbody>
-                        {doctors.map(doctor => (
-                            <tr key={doctor.id} onDoubleClick={() => onDoctorDoubleClick(doctor)} className="bg-gray-800 border-b border-gray-700 hover:bg-gray-700/50 transition-colors cursor-pointer">
-                                <td className="px-6 py-4 font-medium text-white whitespace-nowrap">
-                                    <div className="flex items-center justify-between gap-3">
-                                        <div className="flex items-center gap-3">
-                                            {getVisitAlert(doctor.lastVisit)}
-                                            <span>{doctor.firstName} {doctor.lastName}</span>
-                                        </div>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                onSetTodayAsLastVisit(doctor.id);
-                                            }}
-                                            className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-1 px-2 rounded-lg flex items-center gap-1.5"
-                                            title="Imposta data visita a oggi"
-                                        >
-                                            <CalendarPlus size={16} />
-                                        </button>
-                                    </div>
-                                </td>
-                                <td className="px-4 py-4 text-center">{doctor.lastVisit ? new Date(doctor.lastVisit).toLocaleDateString('it-IT') : 'N/D'}</td>
-                                <td className="px-4 py-4 text-center">{doctor.appointmentDate ? new Date(doctor.appointmentDate).toLocaleDateString('it-IT') : 'N/D'}</td>
-                                {daysOfWeek.map(day => <td key={day} className="px-4 py-4 text-center align-top h-16">{getShiftAndStructure(doctor.availability?.[day], doctor.structureIds)}</td>)}
-                            </tr>
+                        {groupedData.map(group => (
+                            <React.Fragment key={group.structureId}>
+                                <tr className="bg-gray-900 border-b-2 border-gray-700">
+                                    <th colSpan={10} className="px-6 py-3 text-left text-lg font-bold text-cyan-400">
+                                        {group.structureName}
+                                    </th>
+                                </tr>
+                                {group.doctors.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={10} className="px-6 py-4 text-center text-gray-500 italic">
+                                            Nessun medico in questa struttura per i filtri selezionati.
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    group.doctors.map(doctor => (
+                                        <tr key={`${group.structureId}-${doctor.id}`} onDoubleClick={() => onDoctorDoubleClick(doctor)} className="bg-gray-800 border-b border-gray-700 hover:bg-gray-700/50 transition-colors cursor-pointer">
+                                            <td className="px-6 py-4 font-medium text-white whitespace-nowrap">
+                                                <div className="flex items-center justify-between gap-3">
+                                                    <div className="flex items-center gap-3">
+                                                        {getVisitAlert(doctor.lastVisit)}
+                                                        <span>{doctor.firstName} {doctor.lastName}</span>
+                                                    </div>
+                                                    <button
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            onSetTodayAsLastVisit(doctor.id);
+                                                        }}
+                                                        className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-1 px-2 rounded-lg flex items-center gap-1.5"
+                                                        title="Imposta data visita a oggi"
+                                                    >
+                                                        <CalendarPlus size={16} />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-4 text-center">{doctor.lastVisit ? new Date(doctor.lastVisit).toLocaleDateString('it-IT') : 'N/D'}</td>
+                                            <td className="px-4 py-4 text-center">{doctor.appointmentDate ? new Date(doctor.appointmentDate).toLocaleDateString('it-IT') : 'N/D'}</td>
+                                            {daysOfWeek.map(day => <td key={day} className="px-4 py-4 text-center align-top h-16">{getShiftAndStructure(doctor.availability?.[day], doctor.structureIds)}</td>)}
+                                        </tr>
+                                    ))
+                                )}
+                            </React.Fragment>
                         ))}
                     </tbody>
                 </table>
@@ -312,34 +274,46 @@ const App = () => {
     const [isStructureDropdownOpen, setIsStructureDropdownOpen] = useState(false);
     const [modalState, setModalState] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {}, onCancel: null });
 
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
     // --- INIZIALIZZAZIONE FIREBASE E AUTH ---
     useEffect(() => {
-        try {
-            // Verifica che le chiavi non siano i placeholder
-            if (firebaseConfig.apiKey === "YOUR_API_KEY") {
-                 console.error("Configurazione Firebase non valida. Sostituisci i placeholder in firebaseConfig.");
-                 setAuthError("Configurazione Firebase mancante. Controlla la console per i dettagli.");
-                 setIsLoading(false);
-                 return;
-            }
-            const app = initializeApp(firebaseConfig);
-            const firestoreDb = getFirestore(app);
-            const firebaseAuth = getAuth(app);
-            setDb(firestoreDb);
-            setAuth(firebaseAuth);
+        const initializeFirebase = async () => {
+            try {
+                if (typeof __firebase_config === 'undefined') {
+                    console.error("Configurazione Firebase non trovata.");
+                    setAuthError("Configurazione Firebase mancante. L'app non può funzionare.");
+                    setIsLoading(false);
+                    return;
+                }
+                const firebaseConfig = JSON.parse(__firebase_config);
+                const app = initializeApp(firebaseConfig);
+                const firestoreDb = getFirestore(app);
+                const firebaseAuth = getAuth(app);
+                setDb(firestoreDb);
+                setAuth(firebaseAuth);
 
-            const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
-                setUser(user);
+                onAuthStateChanged(firebaseAuth, (user) => {
+                    setUser(user);
+                    setIsLoading(false);
+                });
+
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(firebaseAuth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(firebaseAuth);
+                }
+
+            } catch (e) {
+                console.error("Errore di configurazione o autenticazione Firebase.", e);
+                setAuthError("Errore di configurazione o autenticazione. Controlla la console.");
                 setIsLoading(false);
-            });
-            return () => unsubscribe();
-        } catch (e) {
-            console.error("Errore di configurazione Firebase.", e);
-            setAuthError("Errore di configurazione. Controlla la console.");
-            setIsLoading(false);
-        }
+            }
+        };
+
+        initializeFirebase();
     }, []);
+
 
     // --- FETCH DATI SPECIFICI DELL'UTENTE ---
     useEffect(() => {
@@ -349,27 +323,19 @@ const App = () => {
             return;
         }
 
-        const doctorsQuery = collection(db, 'users', user.uid, 'doctors');
-        const unsubDoctors = onSnapshot(doctorsQuery, snap => setDoctors(snap.docs.map(d => ({ id: d.id, ...d.data() }))), err => console.error("Errore fetch medici:", err));
+        const doctorsPath = collection(db, 'artifacts', appId, 'users', user.uid, 'doctors');
+        const unsubDoctors = onSnapshot(doctorsPath, snap => setDoctors(snap.docs.map(d => ({ id: d.id, ...d.data() }))), err => console.error("Errore fetch medici:", err));
 
-        const structuresQuery = collection(db, 'users', user.uid, 'structures');
-        const unsubStructures = onSnapshot(structuresQuery, snap => setStructures(snap.docs.map(s => ({ id: s.id, ...s.data() }))), err => console.error("Errore fetch strutture:", err));
+        const structuresPath = collection(db, 'artifacts', appId, 'users', user.uid, 'structures');
+        const unsubStructures = onSnapshot(structuresPath, snap => setStructures(snap.docs.map(s => ({ id: s.id, ...s.data() }))), err => console.error("Errore fetch strutture:", err));
 
         return () => {
             unsubDoctors();
             unsubStructures();
         };
-    }, [user, db]);
+    }, [user, db, appId]);
 
     // --- FUNZIONI DI AUTENTICAZIONE ---
-    const handleRegister = (email, password) => {
-        if (!auth) return;
-        createUserWithEmailAndPassword(auth, email, password).catch(error => setAuthError(error.message));
-    };
-    const handleLogin = (email, password) => {
-        if (!auth) return;
-        signInWithEmailAndPassword(auth, email, password).catch(error => setAuthError(error.message));
-    };
     const handleLogout = () => {
         if (!auth) return;
         signOut(auth);
@@ -425,6 +391,48 @@ const App = () => {
         return items;
     }, [doctors, sortConfig, structures, filterAlertsOnly, alertDays, searchQuery, dayFilter, structureFilter, filterUpcoming]);
 
+    // --- LOGICA DI RAGGRUPPAMENTO (NUOVA) ---
+    const groupedDoctors = React.useMemo(() => {
+        const structureMap = new Map(structures.map(s => [s.id, s.name]));
+        structureMap.set('none', 'Nessuna Struttura Assegnata');
+
+        const groups = {};
+        
+        structureMap.forEach((name, id) => {
+            groups[id] = { structureName: name, doctors: [] };
+        });
+
+        processedDoctors.forEach(doctor => {
+            if (doctor.structureIds && doctor.structureIds.length > 0) {
+                doctor.structureIds.forEach(structureId => {
+                    if (groups[structureId]) {
+                        groups[structureId].doctors.push(doctor);
+                    }
+                });
+            } else {
+                groups['none'].doctors.push(doctor);
+            }
+        });
+        
+        return Object.entries(groups)
+            .map(([structureId, data]) => ({ structureId, ...data }))
+            .filter(group => {
+                // Mostra il gruppo solo se la struttura esiste realmente (non è stata cancellata)
+                // O se è il gruppo "Nessuna Struttura" e ha medici
+                const structureExists = structures.some(s => s.id === group.structureId);
+                if (group.structureId === 'none') {
+                    return group.doctors.length > 0;
+                }
+                return structureExists;
+            })
+            .sort((a, b) => {
+                if (a.structureId === 'none') return 1;
+                if (b.structureId === 'none') return -1;
+                return a.structureName.localeCompare(b.structureName, 'it', { sensitivity: 'base' });
+            });
+    }, [processedDoctors, structures]);
+
+
     const requestSort = (key) => {
         let direction = 'asc';
         if (sortConfig.key === key && sortConfig.direction === 'asc') { direction = 'desc'; }
@@ -443,7 +451,7 @@ const App = () => {
         if (!user || !db) return;
         try {
             const today = new Date().toISOString().split('T')[0];
-            const doctorRef = doc(db, `users/${user.uid}/doctors`, doctorId);
+            const doctorRef = doc(db, 'artifacts', appId, 'users', user.uid, 'doctors', doctorId);
             await setDoc(doctorRef, { lastVisit: today }, { merge: true });
         } catch (error) {
             console.error("Errore nell'aggiornare la data dell'ultima visita:", error);
@@ -457,12 +465,12 @@ const App = () => {
             return; 
         }
         try {
-            const path = `users/${user.uid}/doctors`;
+            const doctorsPath = collection(db, 'artifacts', appId, 'users', user.uid, 'doctors');
             if (doctorData.id) {
                 const { id, ...dataToSave } = doctorData;
-                await setDoc(doc(db, path, id), dataToSave);
+                await setDoc(doc(doctorsPath, id), dataToSave);
             } else {
-                await addDoc(collection(db, path), doctorData);
+                await addDoc(doctorsPath, doctorData);
             }
             handleCloseDoctorModal();
         } catch (error) { console.error("Error saving doctor", error); }
@@ -472,7 +480,8 @@ const App = () => {
         if (!user || !db) return;
         const confirmDelete = async () => {
             try {
-                await deleteDoc(doc(db, `users/${user.uid}/doctors`, id));
+                const doctorRef = doc(db, 'artifacts', appId, 'users', user.uid, 'doctors', id);
+                await deleteDoc(doctorRef);
                 handleCloseDoctorModal();
             } catch (error) { console.error("Error deleting doctor:", error); }
             finally { setModalState({ isOpen: false }); }
@@ -488,12 +497,12 @@ const App = () => {
             return; 
         }
         try {
-            const path = `users/${user.uid}/structures`;
+            const structuresPath = collection(db, 'artifacts', appId, 'users', user.uid, 'structures');
             if (structureData.id) {
                 const { id, ...dataToSave } = structureData;
-                await setDoc(doc(db, path, id), dataToSave);
+                await setDoc(doc(structuresPath, id), dataToSave);
             } else {
-                await addDoc(collection(db, path), structureData);
+                await addDoc(structuresPath, structureData);
             }
             handleCloseStructureModal();
         } catch (error) { console.error("Error saving structure:", error); }
@@ -503,16 +512,16 @@ const App = () => {
         if (!user || !db) return;
         const confirmDelete = async () => {
              try {
-                const path = `users/${user.uid}/structures`;
-                const doctorsPath = `users/${user.uid}/doctors`;
+                const structureRef = doc(db, 'artifacts', appId, 'users', user.uid, 'structures', id);
+                const doctorsPath = collection(db, 'artifacts', appId, 'users', user.uid, 'doctors');
                 const batch = writeBatch(db);
                 const doctorsToUpdate = doctors.filter(d => d.structureIds?.includes(id));
                 doctorsToUpdate.forEach(d => {
                     const newIds = d.structureIds.filter(sid => sid !== id);
-                    batch.update(doc(db, doctorsPath, d.id), { structureIds: newIds });
+                    batch.update(doc(doctorsPath, d.id), { structureIds: newIds });
                 });
                 await batch.commit();
-                await deleteDoc(doc(db, path, id));
+                await deleteDoc(structureRef);
             } catch (error) { console.error(error); }
             finally { setModalState({ isOpen: false }); }
         };
@@ -541,8 +550,8 @@ const App = () => {
                     if (!data.doctors || !data.structures) throw new Error("File format invalid");
                     setIsLoading(true);
                     const batch = writeBatch(db);
-                    const doctorsPath = collection(db, 'users', user.uid, 'doctors');
-                    const structuresPath = collection(db, 'users', user.uid, 'structures');
+                    const doctorsPath = collection(db, 'artifacts', appId, 'users', user.uid, 'doctors');
+                    const structuresPath = collection(db, 'artifacts', appId, 'users', user.uid, 'structures');
                     const existingDocs = await getDocs(doctorsPath);
                     existingDocs.forEach(d => batch.delete(d.ref));
                     const existingStructs = await getDocs(structuresPath);
@@ -573,7 +582,14 @@ const App = () => {
 
     if (isLoading) return <div className="flex items-center justify-center h-screen bg-gray-900 text-white">Caricamento...</div>;
 
-    if (!user) return <AuthPage onLogin={handleLogin} onRegister={handleRegister} setAuthError={setAuthError} authError={authError} />;
+    if (!user) {
+        return (
+            <div className="flex flex-col items-center justify-center h-screen bg-gray-900 text-white">
+                <h2 className="text-2xl mb-4">Autenticazione in corso...</h2>
+                {authError && <p className="text-red-400">{authError}</p>}
+            </div>
+        );
+    }
 
     return (
         <div className="bg-gray-900 text-white min-h-screen font-sans p-4 sm:p-6 md:p-8">
@@ -591,7 +607,7 @@ const App = () => {
                     <div className="flex justify-between items-start flex-wrap gap-4">
                         <div>
                             <h1 className="text-4xl font-bold text-cyan-400">Gestionale Medici</h1>
-                            <p className="text-gray-400 mt-2">Utente: {user.email}</p>
+                            <p className="text-gray-400 mt-2">ID Utente: {user.uid}</p>
                         </div>
                         <div className="flex items-center gap-2">
                             <input type="file" id="import-file" className="hidden" accept=".json" onChange={handleImport} />
@@ -615,11 +631,11 @@ const App = () => {
                                 </div>
                             </div>
                             <div className="flex flex-wrap items-center justify-center gap-4 text-sm mb-6 bg-gray-800/50 p-4 rounded-lg">
-                                 <div className="flex items-center gap-2"><span className="font-semibold">Ordina per:</span><button onClick={() => requestSort('lastName')} className={`px-3 py-1 rounded-full ${sortConfig.key === 'lastName' ? 'bg-cyan-600' : 'bg-gray-700'}`}>Nome</button><button onClick={() => requestSort('lastVisit')} className={`px-3 py-1 rounded-full ${sortConfig.key === 'lastVisit' ? 'bg-cyan-600' : 'bg-gray-700'}`}>Ultima Visita</button></div>
-                                 <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={filterAlertsOnly} onChange={() => setFilterAlertsOnly(!filterAlertsOnly)} className="form-checkbox h-5 w-5 text-cyan-500 bg-gray-900 border-gray-600 rounded focus:ring-cyan-600"/><span className="flex items-center gap-1"><Filter size={14}/> Solo con alert</span></label>
-                                 <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={filterUpcoming} onChange={() => setFilterUpcoming(!filterUpcoming)} className="form-checkbox h-5 w-5 text-cyan-500 bg-gray-900 border-gray-600 rounded focus:ring-cyan-600"/><span className="flex items-center gap-1"><CalendarPlus size={14}/> App. prossimi 7 gg</span></label>
-                                 <div className="flex items-center gap-2"><label className="font-semibold" htmlFor="day-filter">Giorno:</label><select id="day-filter" value={dayFilter} onChange={(e) => setDayFilter(e.target.value)} className="bg-gray-700 text-white p-2 rounded-md"><option value="">Qualsiasi</option><option value="lunedi">Lunedì</option><option value="martedi">Martedì</option><option value="mercoledi">Mercoledì</option><option value="giovedi">Giovedì</option><option value="venerdi">Venerdì</option><option value="sabato">Sabato</option><option value="domenica">Domenica</option></select></div>
-                                 <div className="relative"><button onClick={() => setIsStructureDropdownOpen(!isStructureDropdownOpen)} className="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded-md">Filtra per Struttura <ChevronDown size={16}/></button>
+                                <div className="flex items-center gap-2"><span className="font-semibold">Ordina per:</span><button onClick={() => requestSort('lastName')} className={`px-3 py-1 rounded-full ${sortConfig.key === 'lastName' ? 'bg-cyan-600' : 'bg-gray-700'}`}>Nome</button><button onClick={() => requestSort('lastVisit')} className={`px-3 py-1 rounded-full ${sortConfig.key === 'lastVisit' ? 'bg-cyan-600' : 'bg-gray-700'}`}>Ultima Visita</button></div>
+                                <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={filterAlertsOnly} onChange={() => setFilterAlertsOnly(!filterAlertsOnly)} className="form-checkbox h-5 w-5 text-cyan-500 bg-gray-900 border-gray-600 rounded focus:ring-cyan-600"/><span className="flex items-center gap-1"><Filter size={14}/> Solo con alert</span></label>
+                                <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={filterUpcoming} onChange={() => setFilterUpcoming(!filterUpcoming)} className="form-checkbox h-5 w-5 text-cyan-500 bg-gray-900 border-gray-600 rounded focus:ring-cyan-600"/><span className="flex items-center gap-1"><CalendarPlus size={14}/> App. prossimi 7 gg</span></label>
+                                <div className="flex items-center gap-2"><label className="font-semibold" htmlFor="day-filter">Giorno:</label><select id="day-filter" value={dayFilter} onChange={(e) => setDayFilter(e.target.value)} className="bg-gray-700 text-white p-2 rounded-md"><option value="">Qualsiasi</option><option value="lunedi">Lunedì</option><option value="martedi">Martedì</option><option value="mercoledi">Mercoledì</option><option value="giovedi">Giovedì</option><option value="venerdi">Venerdì</option><option value="sabato">Sabato</option><option value="domenica">Domenica</option></select></div>
+                                <div className="relative"><button onClick={() => setIsStructureDropdownOpen(!isStructureDropdownOpen)} className="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded-md">Filtra per Struttura <ChevronDown size={16}/></button>
                                     {isStructureDropdownOpen && (<div className="absolute top-full mt-2 w-56 bg-gray-600 rounded-md shadow-lg z-10 p-2">
                                         <button onClick={() => setStructureFilter([])} className="w-full text-left p-1.5 rounded-md hover:bg-gray-500 font-semibold mb-1">Tutte le strutture</button>
                                         <hr className="border-gray-500 mb-1"/>
@@ -632,7 +648,7 @@ const App = () => {
                                 <div className="flex items-center gap-2"><label htmlFor="yellow-days" className="text-sm text-yellow-300">Giallo (giorni):</label><input type="number" id="yellow-days" value={alertDays.yellow} onChange={(e) => setAlertDays(p => ({ ...p, yellow: Number(e.target.value) || 0 }))} className="bg-gray-700 w-20 p-2 rounded-md"/></div>
                                 <div className="flex items-center gap-2"><label htmlFor="red-days" className="text-sm text-red-300">Rosso (giorni):</label><input type="number" id="red-days" value={alertDays.red} onChange={(e) => setAlertDays(p => ({ ...p, red: Number(e.target.value) || 0 }))} className="bg-gray-700 w-20 p-2 rounded-md"/></div>
                             </div>
-                            <TableView doctors={processedDoctors} structures={structures} alertDays={alertDays} onDoctorDoubleClick={handleOpenDoctorModal} onSetTodayAsLastVisit={handleSetTodayAsLastVisit} />
+                            <TableView groupedData={groupedDoctors} structures={structures} alertDays={alertDays} onDoctorDoubleClick={handleOpenDoctorModal} onSetTodayAsLastVisit={handleSetTodayAsLastVisit} />
                         </>
                     )}
                     {activeTab === 'strutture' && (

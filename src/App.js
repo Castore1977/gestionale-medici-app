@@ -248,6 +248,10 @@ const ConfirmationModal = ({ isOpen, title, message, onConfirm, onCancel, confir
 
 
 const App = () => {
+    // --- COSTANTI GLOBALI ---
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
     // --- STATI GLOBALI ---
     const [db, setDb] = useState(null);
     const [auth, setAuth] = useState(null);
@@ -295,8 +299,7 @@ const App = () => {
                     setUser(user);
                     setIsLoading(false);
                 });
-
-                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                
                 if (initialAuthToken) {
                     await signInWithCustomToken(firebaseAuth, initialAuthToken);
                 } else {
@@ -310,7 +313,7 @@ const App = () => {
         };
 
         initializeFirebase();
-    }, []);
+    }, [initialAuthToken]);
 
     // --- FETCH DATI SPECIFICI DELL'UTENTE ---
     useEffect(() => {
@@ -333,7 +336,7 @@ const App = () => {
             unsubDoctors();
             unsubStructures();
         };
-    }, [user, db]);
+    }, [user, db, appId]);
 
     // --- FUNZIONI DI AUTENTICAZIONE ---
     const handleLogout = () => {

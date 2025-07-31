@@ -119,10 +119,6 @@ const TableView = ({ groupedDoctors, structures, alertDays, onDoctorDoubleClick,
             if (!isNaN(startHour)) { if (startHour < 14) morning = true; else afternoon = true; }
         });
         
-        // In this grouped view, the structure name is already in the header, so we don't need to repeat it here.
-        // We can show it if a doctor belongs to multiple structures, but for now, let's keep it clean.
-        // const associatedStructures = structureIds?.map(id => structures.find(s => s.id === id)?.name).filter(Boolean).join(', ');
-
         return (
             <div className="flex flex-col items-center justify-center gap-1">
                 <div className="flex items-center justify-center gap-1.5 flex-wrap">
@@ -150,13 +146,13 @@ const TableView = ({ groupedDoctors, structures, alertDays, onDoctorDoubleClick,
                             <tr className="bg-gray-900/80 backdrop-blur-sm sticky top-[41px] z-10">
                                 <th colSpan={10} className="px-6 py-3 text-left text-cyan-300 text-base font-bold tracking-wider">
                                     <div className="flex items-center gap-3">
-                                      <Building size={20} />
-                                      {group.name} ({group.doctors.length})
+                                        <Building size={20} />
+                                        {group.name} ({group.doctors.length})
                                     </div>
                                 </th>
                             </tr>
                             {group.doctors.map(doctor => (
-                                <tr key={doctor.id} onDoubleClick={() => onDoctorDoubleClick(doctor)} className="bg-gray-800 border-b border-gray-700 hover:bg-gray-700/50 transition-colors cursor-pointer group">
+                                <tr key={doctor.id} onDoubleClick={() => onDoctorDoubleClick(doctor)} className="bg-gray-800 border-b border-gray-700 hover:bg-gray-700/50 transition-colors cursor-pointer">
                                     <td className="px-6 py-4 font-medium text-white whitespace-nowrap">
                                         <div className="flex items-center justify-between gap-3">
                                             <div className="flex items-center gap-3">
@@ -168,7 +164,7 @@ const TableView = ({ groupedDoctors, structures, alertDays, onDoctorDoubleClick,
                                                     e.stopPropagation();
                                                     onSetTodayAsLastVisit(doctor.id);
                                                 }}
-                                                className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-1 px-2 rounded-lg flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                className="bg-teal-500 hover:bg-teal-600 text-white font-bold py-1 px-2 rounded-lg flex items-center gap-1.5 transition-opacity"
                                                 title="Imposta data visita a oggi"
                                             >
                                                 <CalendarPlus size={16} />

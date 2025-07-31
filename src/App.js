@@ -313,6 +313,7 @@ const App = () => {
     const [alertDays, setAlertDays] = useState({ yellow: 30, red: 40 });
     const [sortConfig, setSortConfig] = useState({ key: 'lastName', direction: 'asc' });
     const [filterAlertsOnly, setFilterAlertsOnly] = useState(false);
+    const [filterRedsOnly, setFilterRedsOnly] = useState(false);
     const [filterUpcoming, setFilterUpcoming] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [dayFilter, setDayFilter] = useState('');
@@ -414,6 +415,17 @@ const App = () => {
                 return diffDays > alertDays.yellow;
             });
         }
+        if (filterRedsOnly) {
+            filtered = filtered.filter(doctor => {
+                if (!doctor.lastVisit) return false;
+                const today = new Date();
+                const visitDate = new Date(doctor.lastVisit);
+                today.setHours(0, 0, 0, 0); visitDate.setHours(0, 0, 0, 0);
+                const diffTime = today - visitDate;
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                return diffDays > alertDays.red;
+            });
+        }
 
         // 2. Raggruppa i medici filtrati
         const groups = {};
@@ -452,7 +464,7 @@ const App = () => {
             })
             .filter(group => group.doctors.length > 0);
 
-    }, [doctors, structures, sortConfig, filterAlertsOnly, alertDays, searchQuery, dayFilter, structureFilter, filterUpcoming]);
+    }, [doctors, structures, sortConfig, filterAlertsOnly, filterRedsOnly, alertDays, searchQuery, dayFilter, structureFilter, filterUpcoming]);
 
     const requestSort = (key) => {
         let direction = 'asc';
@@ -644,7 +656,8 @@ const App = () => {
                             </div>
                             <div className="flex flex-wrap items-center justify-center gap-4 text-sm mb-6 bg-gray-800/50 p-4 rounded-lg">
                                 <div className="flex items-center gap-2"><span className="font-semibold">Ordina per:</span><button onClick={() => requestSort('lastName')} className={`px-3 py-1 rounded-full ${sortConfig.key === 'lastName' ? 'bg-cyan-600' : 'bg-gray-700'}`}>Nome</button><button onClick={() => requestSort('lastVisit')} className={`px-3 py-1 rounded-full ${sortConfig.key === 'lastVisit' ? 'bg-cyan-600' : 'bg-gray-700'}`}>Ultima Visita</button></div>
-                                <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={filterAlertsOnly} onChange={() => setFilterAlertsOnly(!filterAlertsOnly)} className="form-checkbox h-5 w-5 text-cyan-500 bg-gray-900 border-gray-600 rounded focus:ring-cyan-600"/><span className="flex items-center gap-1"><Filter size={14}/> Solo con alert</span></label>
+                                <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={filterAlertsOnly} onChange={() => setFilterAlertsOnly(!filterAlertsOnly)} className="form-checkbox h-5 w-5 text-cyan-500 bg-gray-900 border-gray-600 rounded focus:ring-cyan-600"/><span className="flex items-center gap-1"><Filter size={14}/> Gialli e rossi</span></label>
+                                <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={filterRedsOnly} onChange={() => setFilterRedsOnly(!filterRedsOnly)} className="form-checkbox h-5 w-5 text-cyan-500 bg-gray-900 border-gray-600 rounded focus:ring-cyan-600"/><span className="flex items-center gap-1"><Filter size={14}/> Solo i rossi</span></label>
                                 <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={filterUpcoming} onChange={() => setFilterUpcoming(!filterUpcoming)} className="form-checkbox h-5 w-5 text-cyan-500 bg-gray-900 border-gray-600 rounded focus:ring-cyan-600"/><span className="flex items-center gap-1"><CalendarPlus size={14}/> App. prossimi 7 gg</span></label>
                                 <div className="flex items-center gap-2"><label className="font-semibold" htmlFor="day-filter">Giorno:</label><select id="day-filter" value={dayFilter} onChange={(e) => setDayFilter(e.target.value)} className="bg-gray-700 text-white p-2 rounded-md"><option value="">Qualsiasi</option><option value="lunedi">Lunedì</option><option value="martedi">Martedì</option><option value="mercoledi">Mercoledì</option><option value="giovedi">Giovedì</option><option value="venerdi">Venerdì</option><option value="sabato">Sabato</option><option value="domenica">Domenica</option></select></div>
                                 <div className="relative"><button onClick={() => setIsStructureDropdownOpen(!isStructureDropdownOpen)} className="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded-md">Filtra per Struttura <ChevronDown size={16}/></button>

@@ -414,9 +414,18 @@ const OptimizationResultModal = ({ isOpen, onClose, result }) => {
                         </h3>
                         <div className="space-y-2">
                             {result.appointments.map(doctor => (
-                                <div key={doctor.id} className="flex items-center justify-between p-2 rounded-lg bg-gray-800">
-                                    <span className="font-bold text-white">{doctor.firstName} {doctor.lastName}</span>
-                                    <span className="text-sm text-gray-400">{doctor.structureNames}</span>
+                                <div key={doctor.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 rounded-lg bg-gray-800 gap-2">
+                                    <div className="flex-grow">
+                                        <p className="font-bold text-white">{doctor.firstName} {doctor.lastName}</p>
+                                        <p className="text-sm text-gray-400">{doctor.structureNames}</p>
+                                    </div>
+                                    {doctor.dayAvailability && (
+                                        <div className="flex items-center gap-2 bg-gray-700/50 px-2 py-1 rounded-md text-xs flex-shrink-0">
+                                            {doctor.dayAvailability.includes("Mattina") && <Sun size={14} className="text-yellow-400"/>}
+                                            {doctor.dayAvailability.includes("Pomeriggio") && <Moon size={14} className="text-indigo-400"/>}
+                                            <span className="text-gray-300">{doctor.dayAvailability}</span>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -656,13 +665,22 @@ const App = () => {
         // --- 2. Isola gli appuntamenti del giorno ---
         const appointmentsForTheDay = doctors
             .filter(doctor => doctor.appointmentDate === selectedDate)
-            .map(doctor => ({
-                ...doctor,
-                structureNames: (doctor.structureIds || [])
-                    .map(id => structureMap[id])
-                    .filter(Boolean)
-                    .join(', ') || 'Nessuna struttura',
-            }))
+            .map(doctor => {
+                const availability = doctor.availability?.[dayOfWeek];
+                const { morning, afternoon } = getShift(availability);
+                let availabilityText = [];
+                if (morning) availabilityText.push("Mattina");
+                if (afternoon) availabilityText.push("Pomeriggio");
+
+                return {
+                    ...doctor,
+                    structureNames: (doctor.structureIds || [])
+                        .map(id => structureMap[id])
+                        .filter(Boolean)
+                        .join(', ') || 'Nessuna struttura',
+                    dayAvailability: availabilityText.join(' / ')
+                };
+            })
             .sort(sorter);
 
         const appointmentDoctorIds = new Set(appointmentsForTheDay.map(d => d.id));

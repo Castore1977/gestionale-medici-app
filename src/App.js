@@ -18,7 +18,7 @@ import {
     getDocs,
     writeBatch
 } from 'firebase/firestore';
-import { Plus, Trash2, Building, UserPlus, Save, X, Clock, Sun, Moon, Upload, Download, AlertCircle, Filter, Edit, Search, ChevronDown, LogOut, CalendarPlus } from 'lucide-react';
+import { Plus, Trash2, Building, UserPlus, Save, X, Clock, Sun, Moon, Upload, Download, AlertCircle, Filter, Edit, Search, ChevronDown, LogOut, CalendarPlus, Zap, CalendarCheck, HelpCircle } from 'lucide-react';
 
 // --- CONFIGURAZIONE FIREBASE ---
 const firebaseConfig = {
@@ -299,6 +299,116 @@ const ConfirmationModal = ({ isOpen, title, message, onConfirm, onCancel, confir
     );
 };
 
+// --- [NUOVO] MODALE PER SELEZIONE DATA OTTIMIZZAZIONE ---
+const OptimizeDateModal = ({ isOpen, onClose, onOptimize }) => {
+    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+
+    if (!isOpen) return null;
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        onOptimize(selectedDate);
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
+            <div className="bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-sm">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-bold text-cyan-400">Ottimizza Visite</h2>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white"><X size={28}/></button>
+                </div>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                        <label htmlFor="optimize-date" className="text-lg font-semibold mb-2 block">Seleziona il giorno</label>
+                        <input
+                            id="optimize-date"
+                            name="optimize-date"
+                            type="date"
+                            value={selectedDate}
+                            onChange={(e) => setSelectedDate(e.target.value)}
+                            className="w-full bg-gray-700 p-3 rounded-lg"
+                        />
+                    </div>
+                    <div className="flex justify-end gap-4 pt-4">
+                        <button type="button" onClick={onClose} className="bg-gray-600 font-bold py-2 px-4 rounded-lg">Annulla</button>
+                        <button type="submit" className="bg-cyan-500 font-bold py-2 px-4 rounded-lg flex items-center gap-2">
+                            <Zap size={18}/> Ottimizza
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+};
+
+// --- [NUOVO] MODALE PER RISULTATI OTTIMIZZAZIONE ---
+const OptimizationResultModal = ({ isOpen, onClose, result }) => {
+    if (!isOpen || !result) return null;
+
+    const DoctorRow = ({ doctor, hasAppointment }) => (
+        <div className={`flex items-center justify-between p-2 rounded-lg ${hasAppointment ? 'bg-green-900/50 border border-green-500' : 'bg-gray-700/50'}`}>
+            <span className="font-medium">{doctor.firstName} {doctor.lastName}</span>
+            {hasAppointment && <CalendarCheck size={18} className="text-green-400" title="Appuntamento Fissato"/>}
+        </div>
+    );
+
+    const hasAppointmentOnDate = (doctor, date) => doctor.appointmentDate === date;
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
+            <div className="bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center mb-4 sticky top-0 bg-gray-800 py-2 z-10">
+                    <div>
+                        <h2 className="text-2xl font-bold text-cyan-400">Visite Ottimizzate per il {new Date(result.date).toLocaleDateString('it-IT')}</h2>
+                        <p className="text-gray-400 capitalize">{result.dayOfWeek}</p>
+                    </div>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white"><X size={28}/></button>
+                </div>
+
+                <div className="grid md:grid-cols-2 gap-6">
+                    {/* Colonna Mattina */}
+                    <div className="space-y-4">
+                        <h3 className="text-xl font-bold text-yellow-400 flex items-center gap-2"><Sun/> Mattina</h3>
+                        <div className="bg-gray-900/50 p-3 rounded-lg space-y-2">
+                            <h4 className="font-semibold text-gray-300">Medici Disponibili</h4>
+                            {result.mattina.disponibili.length > 0 ? (
+                                result.mattina.disponibili.map(doc => <DoctorRow key={doc.id + '-m-disp'} doctor={doc} hasAppointment={hasAppointmentOnDate(doc, result.date)} />)
+                            ) : <p className="text-gray-500 text-sm">Nessun medico disponibile.</p>}
+                        </div>
+                        {result.mattina.potenziali.length > 0 && (
+                            <div className="bg-gray-900/50 p-3 rounded-lg space-y-2">
+                                <h4 className="font-semibold text-gray-300 flex items-center gap-1.5">
+                                    <HelpCircle size={16} /> Potenziali (da strutture correlate)
+                                </h4>
+                                {result.mattina.potenziali.map(doc => <DoctorRow key={doc.id + '-m-pot'} doctor={doc} hasAppointment={false} />)}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Colonna Pomeriggio */}
+                    <div className="space-y-4">
+                        <h3 className="text-xl font-bold text-indigo-400 flex items-center gap-2"><Moon/> Pomeriggio</h3>
+                         <div className="bg-gray-900/50 p-3 rounded-lg space-y-2">
+                            <h4 className="font-semibold text-gray-300">Medici Disponibili</h4>
+                            {result.pomeriggio.disponibili.length > 0 ? (
+                                result.pomeriggio.disponibili.map(doc => <DoctorRow key={doc.id + '-p-disp'} doctor={doc} hasAppointment={hasAppointmentOnDate(doc, result.date)} />)
+                            ) : <p className="text-gray-500 text-sm">Nessun medico disponibile.</p>}
+                        </div>
+                        {result.pomeriggio.potenziali.length > 0 && (
+                            <div className="bg-gray-900/50 p-3 rounded-lg space-y-2">
+                                <h4 className="font-semibold text-gray-300 flex items-center gap-1.5">
+                                    <HelpCircle size={16} /> Potenziali (da strutture correlate)
+                                </h4>
+                                {result.pomeriggio.potenziali.map(doc => <DoctorRow key={doc.id + '-p-pot'} doctor={doc} hasAppointment={false} />)}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 const App = () => {
     // --- STATI GLOBALI ---
@@ -326,13 +436,14 @@ const App = () => {
     const [selectedStructure, setSelectedStructure] = useState(null);
     const [isStructureDropdownOpen, setIsStructureDropdownOpen] = useState(false);
     const [modalState, setModalState] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {}, onCancel: null });
+    // --- [NUOVO] STATI PER OTTIMIZZAZIONE ---
+    const [isOptimizeDateModalOpen, setIsOptimizeDateModalOpen] = useState(false);
+    const [optimizationResult, setOptimizationResult] = useState(null);
 
 
     // --- INIZIALIZZAZIONE FIREBASE E AUTH ---
     useEffect(() => {
         try {
-            // Il controllo esplicito per la chiave API è stato rimosso per consentire il rendering dell'anteprima
-            // con valori fittizi. Gli errori di Firebase verranno gestiti durante i tentativi di autenticazione.
             const app = initializeApp(firebaseConfig);
             const firestoreDb = getFirestore(app);
             const firebaseAuth = getAuth(app);
@@ -453,6 +564,9 @@ const App = () => {
                     group.doctors.sort((a, b) => {
                         let aValue = a[sortConfig.key];
                         let bValue = b[sortConfig.key];
+                        if (sortConfig.key === 'lastName') {
+                             return (a.lastName || '').localeCompare(b.lastName || '') * (sortConfig.direction === 'asc' ? 1 : -1);
+                        }
                         if (!aValue) return 1;
                         if (!bValue) return -1;
                         if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
@@ -478,6 +592,90 @@ const App = () => {
     const handleCloseDoctorModal = () => setIsDoctorModalOpen(false);
     const handleOpenStructureModal = (structure = null) => { setSelectedStructure(structure); setIsStructureModalOpen(true); };
     const handleCloseStructureModal = () => setIsStructureModalOpen(false);
+
+    // --- [NUOVA] FUNZIONE PER OTTIMIZZAZIONE VISITE ---
+    const handleOptimizeVisits = (selectedDate) => {
+        if (!selectedDate) return;
+    
+        const date = new Date(selectedDate);
+        // Correzione per getDay(): 0=Domenica, 1=Lunedì... 
+        // La nostra logica vuole 0=Lunedì.
+        const dayIndex = (date.getDay() === 0) ? 6 : date.getDay() - 1; 
+        const daysOfWeek = ['lunedi', 'martedi', 'mercoledi', 'giovedi', 'venerdi', 'sabato', 'domenica'];
+        const dayOfWeek = daysOfWeek[dayIndex];
+    
+        const hasAppointmentOnDate = (doctor) => doctor.appointmentDate === selectedDate;
+    
+        const getShift = (timeString) => {
+            if (!timeString || !timeString.trim()) return { morning: false, afternoon: false };
+            const slots = timeString.split('/').map(s => s.trim());
+            let morning = false, afternoon = false;
+            slots.forEach(slot => {
+                const startHour = parseInt(slot.split('-')[0], 10);
+                if (!isNaN(startHour)) {
+                    if (startHour < 14) morning = true;
+                    else afternoon = true;
+                }
+            });
+            return { morning, afternoon };
+        };
+    
+        let availableInMorning = [];
+        let availableInAfternoon = [];
+        let relevantStructureIds = new Set();
+        let availableDoctorIds = new Set();
+    
+        doctors.forEach(doctor => {
+            const availability = doctor.availability?.[dayOfWeek];
+            const { morning, afternoon } = getShift(availability);
+    
+            if (morning || afternoon) {
+                doctor.structureIds?.forEach(id => relevantStructureIds.add(id));
+                availableDoctorIds.add(doctor.id);
+                if (morning) availableInMorning.push(doctor);
+                if (afternoon) availableInAfternoon.push(doctor);
+            }
+        });
+    
+        const sorter = (a, b) => {
+            const aHasApp = hasAppointmentOnDate(a);
+            const bHasApp = hasAppointmentOnDate(b);
+            if (aHasApp && !bHasApp) return -1;
+            if (!aHasApp && bHasApp) return 1;
+            return (a.lastName || '').localeCompare(b.lastName || '');
+        };
+    
+        availableInMorning.sort(sorter);
+        availableInAfternoon.sort(sorter);
+    
+        let potentialDoctors = [];
+        doctors.forEach(doctor => {
+            if (availableDoctorIds.has(doctor.id)) return;
+    
+            const hasNoAvailability = !doctor.availability?.[dayOfWeek]?.trim();
+            const isInRelevantStructure = doctor.structureIds?.some(id => relevantStructureIds.has(id));
+    
+            if (hasNoAvailability && isInRelevantStructure) {
+                potentialDoctors.push(doctor);
+            }
+        });
+        
+        potentialDoctors.sort((a,b) => (a.lastName || '').localeCompare(b.lastName || ''));
+    
+        setOptimizationResult({
+            date: selectedDate,
+            dayOfWeek: dayOfWeek,
+            mattina: {
+                disponibili: availableInMorning,
+                potenziali: potentialDoctors,
+            },
+            pomeriggio: {
+                disponibili: availableInAfternoon,
+                potenziali: potentialDoctors,
+            }
+        });
+        setIsOptimizeDateModalOpen(false);
+    };
 
     // --- FUNZIONI CRUD ---
     const handleSetTodayAsLastVisit = async (doctorId) => {
@@ -655,6 +853,7 @@ const App = () => {
                                 </div>
                             </div>
                             <div className="flex flex-wrap items-center justify-center gap-4 text-sm mb-6 bg-gray-800/50 p-4 rounded-lg">
+                                <button onClick={() => setIsOptimizeDateModalOpen(true)} className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2"><Zap size={16}/> Ottimizza Visite</button>
                                 <div className="flex items-center gap-2"><span className="font-semibold">Ordina per:</span><button onClick={() => requestSort('lastName')} className={`px-3 py-1 rounded-full ${sortConfig.key === 'lastName' ? 'bg-cyan-600' : 'bg-gray-700'}`}>Nome</button><button onClick={() => requestSort('lastVisit')} className={`px-3 py-1 rounded-full ${sortConfig.key === 'lastVisit' ? 'bg-cyan-600' : 'bg-gray-700'}`}>Ultima Visita</button></div>
                                 <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={filterAlertsOnly} onChange={() => setFilterAlertsOnly(!filterAlertsOnly)} className="form-checkbox h-5 w-5 text-cyan-500 bg-gray-900 border-gray-600 rounded focus:ring-cyan-600"/><span className="flex items-center gap-1"><Filter size={14}/> Gialli e rossi</span></label>
                                 <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" checked={filterRedsOnly} onChange={() => setFilterRedsOnly(!filterRedsOnly)} className="form-checkbox h-5 w-5 text-cyan-500 bg-gray-900 border-gray-600 rounded focus:ring-cyan-600"/><span className="flex items-center gap-1"><Filter size={14}/> Solo i rossi</span></label>
@@ -686,6 +885,17 @@ const App = () => {
             </div>
             <DoctorModal isOpen={isDoctorModalOpen} onClose={handleCloseDoctorModal} onSave={handleSaveDoctor} onDelete={handleDeleteDoctor} structures={structures} initialData={selectedDoctor} onSetTodayAsLastVisit={handleSetTodayAsLastVisit} />
             <StructureModal isOpen={isStructureModalOpen} onClose={handleCloseStructureModal} onSave={handleSaveStructure} initialData={selectedStructure} />
+            {/* Nuove modali per l'ottimizzazione */}
+            <OptimizeDateModal 
+                isOpen={isOptimizeDateModalOpen}
+                onClose={() => setIsOptimizeDateModalOpen(false)}
+                onOptimize={handleOptimizeVisits}
+            />
+            <OptimizationResultModal 
+                isOpen={!!optimizationResult}
+                onClose={() => setOptimizationResult(null)}
+                result={optimizationResult}
+            />
         </div>
     );
 };

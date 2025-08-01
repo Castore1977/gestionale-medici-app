@@ -31,7 +31,6 @@ const firebaseConfig = {
 };
 
 
-
 // --- COMPONENTE AUTENTICAZIONE ---
 const AuthPage = ({ onLogin, onRegister, setAuthError, authError }) => {
     const [email, setEmail] = useState('');
@@ -462,7 +461,7 @@ const OptimizationResultModal = ({ isOpen, onClose, result }) => {
     );
 };
 
-// --- [NUOVO] MODALE PER COMPLEANNI ---
+// --- MODALE PER COMPLEANNI ---
 const BirthdayModal = ({ isOpen, onClose, doctors }) => {
     if (!isOpen) return null;
     
@@ -483,6 +482,47 @@ const BirthdayModal = ({ isOpen, onClose, doctors }) => {
                             </div>
                         );
                     }) : <p className="text-gray-400">Nessun compleanno nei prossimi 10 giorni.</p>}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// --- [NUOVO] MODALE PER APPUNTAMENTI ---
+const AppointmentModal = ({ isOpen, onClose, appointments }) => {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
+            <div className="bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-lg">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-bold text-cyan-400 flex items-center gap-2"><CalendarCheck/> Appuntamenti Imminenti</h2>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white"><X size={28}/></button>
+                </div>
+                <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+                    {appointments.length > 0 ? appointments.map(app => (
+                        <div key={app.id} className="bg-gray-700 p-3 rounded-lg">
+                            <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                                <div>
+                                    <p className="font-bold text-white">{app.firstName} {app.lastName}</p>
+                                    <p className="text-sm text-gray-400">{app.structureNames}</p>
+                                </div>
+                                <div className="flex items-center gap-2 bg-gray-800/50 px-3 py-1 rounded-md text-sm flex-shrink-0">
+                                    <span className="text-cyan-300 font-semibold">{new Date(app.appointmentDate).toLocaleDateString('it-IT')}</span>
+                                </div>
+                            </div>
+                             {app.dayAvailability && (
+                                <div className="mt-2 pt-2 border-t border-gray-600 flex items-center gap-2 text-xs">
+                                    <span className="font-semibold text-gray-400">Disponibilità:</span>
+                                    <div className="flex items-center gap-2">
+                                        {app.dayAvailability.includes("Mattina") && <Sun size={14} className="text-yellow-400"/>}
+                                        {app.dayAvailability.includes("Pomeriggio") && <Moon size={14} className="text-indigo-400"/>}
+                                        <span className="text-gray-300">{app.dayAvailability}</span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )) : <p className="text-gray-400">Nessun appuntamento nei prossimi 10 giorni.</p>}
                 </div>
             </div>
         </div>
@@ -517,6 +557,7 @@ const App = () => {
     const [isStructureDropdownOpen, setIsStructureDropdownOpen] = useState(false);
     const [modalState, setModalState] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {}, onCancel: null });
     const [isBirthdayModalOpen, setIsBirthdayModalOpen] = useState(false);
+    const [isAppointmentModalOpen, setIsAppointmentModalOpen] = useState(false);
     // --- STATI PER OTTIMIZZAZIONE ---
     const [isOptimizeDateModalOpen, setIsOptimizeDateModalOpen] = useState(false);
     const [optimizationResult, setOptimizationResult] = useState(null);
@@ -563,7 +604,7 @@ const App = () => {
         };
     }, [user, db]);
 
-    // --- LOGICA COMPLEANNI ---
+    // --- LOGICA COMPLEANNI E APPUNTAMENTI ---
     const upcomingBirthdays = useMemo(() => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -598,6 +639,57 @@ const App = () => {
 
         return filtered;
     }, [doctors]);
+
+    const upcomingAppointments = useMemo(() => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const limitDate = new Date(today);
+        limitDate.setDate(today.getDate() + 10);
+        const structureMap = Object.fromEntries(structures.map(s => [s.id, s.name]));
+
+        const getShift = (timeString) => {
+            if (!timeString || !timeString.trim()) return { morning: false, afternoon: false };
+            const slots = timeString.split('/').map(s => s.trim());
+            let morning = false, afternoon = false;
+            slots.forEach(slot => {
+                const startHour = parseInt(slot.split('-')[0], 10);
+                if (!isNaN(startHour)) {
+                    if (startHour < 14) morning = true;
+                    else afternoon = true;
+                }
+            });
+            return { morning, afternoon };
+        };
+
+        return doctors
+            .filter(doc => {
+                if (!doc.appointmentDate) return false;
+                const appointmentDate = new Date(doc.appointmentDate);
+                return appointmentDate >= today && appointmentDate <= limitDate;
+            })
+            .map(doc => {
+                const appointmentDate = new Date(doc.appointmentDate);
+                const dayIndex = (appointmentDate.getDay() === 0) ? 6 : appointmentDate.getDay() - 1;
+                const daysOfWeek = ['lunedi', 'martedi', 'mercoledi', 'giovedi', 'venerdi', 'sabato', 'domenica'];
+                const dayOfWeek = daysOfWeek[dayIndex];
+                
+                const availability = doc.availability?.[dayOfWeek];
+                const { morning, afternoon } = getShift(availability);
+                let availabilityText = [];
+                if (morning) availabilityText.push("Mattina");
+                if (afternoon) availabilityText.push("Pomeriggio");
+
+                return {
+                    ...doc,
+                    structureNames: (doc.structureIds || [])
+                        .map(id => structureMap[id])
+                        .filter(Boolean)
+                        .join(', ') || 'Nessuna struttura',
+                    dayAvailability: availabilityText.join(' / ')
+                };
+            })
+            .sort((a, b) => new Date(a.appointmentDate) - new Date(b.appointmentDate));
+    }, [doctors, structures]);
 
     // --- FUNZIONI DI AUTENTICAZIONE ---
     const handleRegister = (email, password) => {
@@ -982,6 +1074,14 @@ const App = () => {
                             <p className="text-gray-400 mt-2">Utente: {user.email}</p>
                         </div>
                         <div className="flex items-center gap-2 flex-wrap">
+                            {upcomingAppointments.length > 0 && (
+                                <button onClick={() => setIsAppointmentModalOpen(true)} className="relative inline-flex items-center gap-2 bg-teal-600 hover:bg-teal-700 font-bold py-2 px-4 rounded-lg">
+                                    <CalendarCheck size={18} />
+                                    <span className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full bg-teal-400 text-xs font-bold text-white">
+                                        {upcomingAppointments.length}
+                                    </span>
+                                </button>
+                            )}
                             {upcomingBirthdays.length > 0 && (
                                 <button onClick={() => setIsBirthdayModalOpen(true)} className="relative inline-flex items-center gap-2 bg-pink-600 hover:bg-pink-700 font-bold py-2 px-4 rounded-lg">
                                     <Cake size={18} />
@@ -1047,6 +1147,11 @@ const App = () => {
                 isOpen={isBirthdayModalOpen}
                 onClose={() => setIsBirthdayModalOpen(false)}
                 doctors={upcomingBirthdays}
+            />
+            <AppointmentModal
+                isOpen={isAppointmentModalOpen}
+                onClose={() => setIsAppointmentModalOpen(false)}
+                appointments={upcomingAppointments}
             />
             <OptimizeDateModal 
                 isOpen={isOptimizeDateModalOpen}

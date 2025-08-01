@@ -299,7 +299,7 @@ const ConfirmationModal = ({ isOpen, title, message, onConfirm, onCancel, confir
     );
 };
 
-// --- [NUOVO] MODALE PER SELEZIONE DATA OTTIMIZZAZIONE ---
+// --- MODALE PER SELEZIONE DATA OTTIMIZZAZIONE ---
 const OptimizeDateModal = ({ isOpen, onClose, onOptimize }) => {
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
@@ -341,18 +341,59 @@ const OptimizeDateModal = ({ isOpen, onClose, onOptimize }) => {
     );
 };
 
-// --- [NUOVO] MODALE PER RISULTATI OTTIMIZZAZIONE ---
+// --- MODALE PER RISULTATI OTTIMIZZAZIONE (CON EVIDENZIAZIONE MIGLIORATA) ---
 const OptimizationResultModal = ({ isOpen, onClose, result }) => {
     if (!isOpen || !result) return null;
 
     const DoctorRow = ({ doctor, hasAppointment }) => (
-        <div className={`flex items-center justify-between p-2 rounded-lg ${hasAppointment ? 'bg-green-900/50 border border-green-500' : 'bg-gray-700/50'}`}>
-            <span className="font-medium">{doctor.firstName} {doctor.lastName}</span>
-            {hasAppointment && <CalendarCheck size={18} className="text-green-400" title="Appuntamento Fissato"/>}
+        <div className={`flex items-center justify-between p-2 rounded-lg transition-all ${hasAppointment ? 'bg-teal-800 border-2 border-teal-500 shadow-lg' : 'bg-gray-700/50'}`}>
+            <span className={`font-medium ${hasAppointment ? 'font-bold text-white' : ''}`}>{doctor.firstName} {doctor.lastName}</span>
+            {hasAppointment && <CalendarCheck size={18} className="text-teal-400" title="Appuntamento Fissato"/>}
         </div>
     );
 
     const hasAppointmentOnDate = (doctor, date) => doctor.appointmentDate === date;
+
+    const renderShift = (shiftData, shiftName) => {
+        const sortedStructures = Object.values(shiftData).sort((a, b) => a.name.localeCompare(b.name));
+
+        const content = sortedStructures.map(struct => {
+            const hasContent = struct.disponibili.length > 0 || struct.potenziali.length > 0;
+            if (!hasContent) return null;
+
+            return (
+                <div key={struct.id} className="bg-gray-900/50 p-3 rounded-lg space-y-3 mb-4">
+                    <h4 className="font-bold text-cyan-300 flex items-center gap-2">
+                        <Building size={18} /> {struct.name}
+                    </h4>
+                    {struct.disponibili.length > 0 && (
+                        <div>
+                            <h5 className="font-semibold text-gray-300 mb-2">Disponibili</h5>
+                            <div className="space-y-2">
+                                {struct.disponibili.map(doc => <DoctorRow key={`${doc.id}-${struct.id}`} doctor={doc} hasAppointment={hasAppointmentOnDate(doc, result.date)} />)}
+                            </div>
+                        </div>
+                    )}
+                    {struct.potenziali.length > 0 && (
+                         <div>
+                            <h5 className="font-semibold text-gray-300 mb-2 flex items-center gap-1.5">
+                                <HelpCircle size={16} /> Potenziali
+                            </h5>
+                             <div className="space-y-2">
+                                {struct.potenziali.map(doc => <DoctorRow key={`${doc.id}-${struct.id}-pot`} doctor={doc} hasAppointment={false} />)}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }).filter(Boolean);
+
+        if (content.length === 0) {
+             return <p className="text-gray-500 text-sm">Nessun medico per {shiftName.toLowerCase()}.</p>
+        }
+
+        return content;
+    };
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
@@ -368,40 +409,14 @@ const OptimizationResultModal = ({ isOpen, onClose, result }) => {
                 <div className="grid md:grid-cols-2 gap-6">
                     {/* Colonna Mattina */}
                     <div className="space-y-4">
-                        <h3 className="text-xl font-bold text-yellow-400 flex items-center gap-2"><Sun/> Mattina</h3>
-                        <div className="bg-gray-900/50 p-3 rounded-lg space-y-2">
-                            <h4 className="font-semibold text-gray-300">Medici Disponibili</h4>
-                            {result.mattina.disponibili.length > 0 ? (
-                                result.mattina.disponibili.map(doc => <DoctorRow key={doc.id + '-m-disp'} doctor={doc} hasAppointment={hasAppointmentOnDate(doc, result.date)} />)
-                            ) : <p className="text-gray-500 text-sm">Nessun medico disponibile.</p>}
-                        </div>
-                        {result.mattina.potenziali.length > 0 && (
-                            <div className="bg-gray-900/50 p-3 rounded-lg space-y-2">
-                                <h4 className="font-semibold text-gray-300 flex items-center gap-1.5">
-                                    <HelpCircle size={16} /> Potenziali (da strutture correlate)
-                                </h4>
-                                {result.mattina.potenziali.map(doc => <DoctorRow key={doc.id + '-m-pot'} doctor={doc} hasAppointment={false} />)}
-                            </div>
-                        )}
+                        <h3 className="text-xl font-bold text-yellow-400 flex items-center gap-2 border-b border-yellow-400/30 pb-2 mb-4"><Sun/> Mattina</h3>
+                        {renderShift(result.mattina, 'la mattina')}
                     </div>
 
                     {/* Colonna Pomeriggio */}
                     <div className="space-y-4">
-                        <h3 className="text-xl font-bold text-indigo-400 flex items-center gap-2"><Moon/> Pomeriggio</h3>
-                         <div className="bg-gray-900/50 p-3 rounded-lg space-y-2">
-                            <h4 className="font-semibold text-gray-300">Medici Disponibili</h4>
-                            {result.pomeriggio.disponibili.length > 0 ? (
-                                result.pomeriggio.disponibili.map(doc => <DoctorRow key={doc.id + '-p-disp'} doctor={doc} hasAppointment={hasAppointmentOnDate(doc, result.date)} />)
-                            ) : <p className="text-gray-500 text-sm">Nessun medico disponibile.</p>}
-                        </div>
-                        {result.pomeriggio.potenziali.length > 0 && (
-                            <div className="bg-gray-900/50 p-3 rounded-lg space-y-2">
-                                <h4 className="font-semibold text-gray-300 flex items-center gap-1.5">
-                                    <HelpCircle size={16} /> Potenziali (da strutture correlate)
-                                </h4>
-                                {result.pomeriggio.potenziali.map(doc => <DoctorRow key={doc.id + '-p-pot'} doctor={doc} hasAppointment={false} />)}
-                            </div>
-                        )}
+                        <h3 className="text-xl font-bold text-indigo-400 flex items-center gap-2 border-b border-indigo-400/30 pb-2 mb-4"><Moon/> Pomeriggio</h3>
+                        {renderShift(result.pomeriggio, 'il pomeriggio')}
                     </div>
                 </div>
             </div>
@@ -436,7 +451,7 @@ const App = () => {
     const [selectedStructure, setSelectedStructure] = useState(null);
     const [isStructureDropdownOpen, setIsStructureDropdownOpen] = useState(false);
     const [modalState, setModalState] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {}, onCancel: null });
-    // --- [NUOVO] STATI PER OTTIMIZZAZIONE ---
+    // --- STATI PER OTTIMIZZAZIONE ---
     const [isOptimizeDateModalOpen, setIsOptimizeDateModalOpen] = useState(false);
     const [optimizationResult, setOptimizationResult] = useState(null);
 
@@ -593,19 +608,27 @@ const App = () => {
     const handleOpenStructureModal = (structure = null) => { setSelectedStructure(structure); setIsStructureModalOpen(true); };
     const handleCloseStructureModal = () => setIsStructureModalOpen(false);
 
-    // --- [NUOVA] FUNZIONE PER OTTIMIZZAZIONE VISITE ---
+    // --- FUNZIONE PER OTTIMIZZAZIONE VISITE (CON RAGGRUPPAMENTO PER STRUTTURA) ---
     const handleOptimizeVisits = (selectedDate) => {
         if (!selectedDate) return;
-    
+
+        // --- 1. Setup ---
         const date = new Date(selectedDate);
-        // Correzione per getDay(): 0=Domenica, 1=Lunedì... 
-        // La nostra logica vuole 0=Lunedì.
-        const dayIndex = (date.getDay() === 0) ? 6 : date.getDay() - 1; 
+        const dayIndex = (date.getDay() === 0) ? 6 : date.getDay() - 1;
         const daysOfWeek = ['lunedi', 'martedi', 'mercoledi', 'giovedi', 'venerdi', 'sabato', 'domenica'];
         const dayOfWeek = daysOfWeek[dayIndex];
-    
+        const structureMap = Object.fromEntries(structures.map(s => [s.id, s.name]));
+        structureMap['unassigned'] = 'Non Assegnati';
+
         const hasAppointmentOnDate = (doctor) => doctor.appointmentDate === selectedDate;
-    
+        const sorter = (a, b) => {
+            const aHasApp = hasAppointmentOnDate(a);
+            const bHasApp = hasAppointmentOnDate(b);
+            if (aHasApp && !bHasApp) return -1;
+            if (!aHasApp && bHasApp) return 1;
+            return (a.lastName || '').localeCompare(b.lastName || '');
+        };
+
         const getShift = (timeString) => {
             if (!timeString || !timeString.trim()) return { morning: false, afternoon: false };
             const slots = timeString.split('/').map(s => s.trim());
@@ -619,60 +642,73 @@ const App = () => {
             });
             return { morning, afternoon };
         };
-    
-        let availableInMorning = [];
-        let availableInAfternoon = [];
+
+        // --- 2. Trova medici disponibili e strutture rilevanti ---
+        let mattina = {};
+        let pomeriggio = {};
         let relevantStructureIds = new Set();
         let availableDoctorIds = new Set();
-    
+
         doctors.forEach(doctor => {
             const availability = doctor.availability?.[dayOfWeek];
             const { morning, afternoon } = getShift(availability);
-    
+
             if (morning || afternoon) {
-                doctor.structureIds?.forEach(id => relevantStructureIds.add(id));
                 availableDoctorIds.add(doctor.id);
-                if (morning) availableInMorning.push(doctor);
-                if (afternoon) availableInAfternoon.push(doctor);
+                const doctorStructureIds = doctor.structureIds?.length > 0 ? doctor.structureIds : ['unassigned'];
+
+                doctorStructureIds.forEach(structId => {
+                    relevantStructureIds.add(structId);
+                    // Inizializza il gruppo se non presente
+                    if (!mattina[structId]) mattina[structId] = { id: structId, name: structureMap[structId] || 'Sconosciuta', disponibili: [], potenziali: [] };
+                    if (!pomeriggio[structId]) pomeriggio[structId] = { id: structId, name: structureMap[structId] || 'Sconosciuta', disponibili: [], potenziali: [] };
+
+                    if (morning) mattina[structId].disponibili.push(doctor);
+                    if (afternoon) pomeriggio[structId].disponibili.push(doctor);
+                });
             }
         });
-    
-        const sorter = (a, b) => {
-            const aHasApp = hasAppointmentOnDate(a);
-            const bHasApp = hasAppointmentOnDate(b);
-            if (aHasApp && !bHasApp) return -1;
-            if (!aHasApp && bHasApp) return 1;
-            return (a.lastName || '').localeCompare(b.lastName || '');
-        };
-    
-        availableInMorning.sort(sorter);
-        availableInAfternoon.sort(sorter);
-    
-        let potentialDoctors = [];
-        doctors.forEach(doctor => {
-            if (availableDoctorIds.has(doctor.id)) return;
-    
+
+        // --- 3. Trova medici potenziali ---
+        const potentialDoctors = doctors.filter(doctor => {
+            if (availableDoctorIds.has(doctor.id)) return false; // Non è già disponibile
             const hasNoAvailability = !doctor.availability?.[dayOfWeek]?.trim();
             const isInRelevantStructure = doctor.structureIds?.some(id => relevantStructureIds.has(id));
-    
-            if (hasNoAvailability && isInRelevantStructure) {
-                potentialDoctors.push(doctor);
-            }
+            return hasNoAvailability && isInRelevantStructure;
         });
-        
-        potentialDoctors.sort((a,b) => (a.lastName || '').localeCompare(b.lastName || ''));
-    
+
+        // --- 4. Aggiungi i medici potenziali alle loro strutture ---
+        potentialDoctors.forEach(doctor => {
+            const doctorStructureIds = doctor.structureIds?.length > 0 ? doctor.structureIds : ['unassigned'];
+            doctorStructureIds.forEach(structId => {
+                if (relevantStructureIds.has(structId)) {
+                    // Aggiungi alle liste potenziali di mattina e pomeriggio
+                    if (mattina[structId] && !mattina[structId].potenziali.some(d => d.id === doctor.id)) {
+                        mattina[structId].potenziali.push(doctor);
+                    }
+                    if (pomeriggio[structId] && !pomeriggio[structId].potenziali.some(d => d.id === doctor.id)) {
+                        pomeriggio[structId].potenziali.push(doctor);
+                    }
+                }
+            });
+        });
+
+        // --- 5. Ordina tutto ---
+        for (const structId in mattina) {
+            mattina[structId].disponibili.sort(sorter);
+            mattina[structId].potenziali.sort((a, b) => (a.lastName || '').localeCompare(b.lastName || ''));
+        }
+        for (const structId in pomeriggio) {
+            pomeriggio[structId].disponibili.sort(sorter);
+            pomeriggio[structId].potenziali.sort((a, b) => (a.lastName || '').localeCompare(b.lastName || ''));
+        }
+
+        // --- 6. Imposta lo stato ---
         setOptimizationResult({
             date: selectedDate,
             dayOfWeek: dayOfWeek,
-            mattina: {
-                disponibili: availableInMorning,
-                potenziali: potentialDoctors,
-            },
-            pomeriggio: {
-                disponibili: availableInAfternoon,
-                potenziali: potentialDoctors,
-            }
+            mattina: mattina,
+            pomeriggio: pomeriggio
         });
         setIsOptimizeDateModalOpen(false);
     };

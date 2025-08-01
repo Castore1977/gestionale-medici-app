@@ -341,7 +341,7 @@ const OptimizeDateModal = ({ isOpen, onClose, onOptimize }) => {
     );
 };
 
-// --- MODALE PER RISULTATI OTTIMIZZAZIONE (CON EVIDENZIAZIONE MIGLIORATA) ---
+// --- MODALE PER RISULTATI OTTIMIZZAZIONE (CON SEZIONE APPUNTAMENTI) ---
 const OptimizationResultModal = ({ isOpen, onClose, result }) => {
     if (!isOpen || !result) return null;
 
@@ -405,6 +405,23 @@ const OptimizationResultModal = ({ isOpen, onClose, result }) => {
                     </div>
                     <button onClick={onClose} className="text-gray-400 hover:text-white"><X size={28}/></button>
                 </div>
+
+                {/* Sezione Appuntamenti Fissati */}
+                {result.appointments && result.appointments.length > 0 && (
+                    <div className="mb-8 p-4 bg-teal-900/70 border-l-4 border-teal-400 rounded-r-lg">
+                        <h3 className="text-xl font-bold text-teal-300 flex items-center gap-2 mb-3">
+                            <CalendarCheck /> Appuntamenti Fissati del Giorno
+                        </h3>
+                        <div className="space-y-2">
+                            {result.appointments.map(doctor => (
+                                <div key={doctor.id} className="flex items-center justify-between p-2 rounded-lg bg-gray-800">
+                                    <span className="font-bold text-white">{doctor.firstName} {doctor.lastName}</span>
+                                    <span className="text-sm text-gray-400">{doctor.structureNames}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 <div className="grid md:grid-cols-2 gap-6">
                     {/* Colonna Mattina */}
@@ -608,7 +625,7 @@ const App = () => {
     const handleOpenStructureModal = (structure = null) => { setSelectedStructure(structure); setIsStructureModalOpen(true); };
     const handleCloseStructureModal = () => setIsStructureModalOpen(false);
 
-    // --- FUNZIONE PER OTTIMIZZAZIONE VISITE (CON RAGGRUPPAMENTO PER STRUTTURA) ---
+    // --- FUNZIONE PER OTTIMIZZAZIONE VISITE (CON SEZIONE APPUNTAMENTI) ---
     const handleOptimizeVisits = (selectedDate) => {
         if (!selectedDate) return;
 
@@ -620,14 +637,7 @@ const App = () => {
         const structureMap = Object.fromEntries(structures.map(s => [s.id, s.name]));
         structureMap['unassigned'] = 'Non Assegnati';
 
-        const hasAppointmentOnDate = (doctor) => doctor.appointmentDate === selectedDate;
-        const sorter = (a, b) => {
-            const aHasApp = hasAppointmentOnDate(a);
-            const bHasApp = hasAppointmentOnDate(b);
-            if (aHasApp && !bHasApp) return -1;
-            if (!aHasApp && bHasApp) return 1;
-            return (a.lastName || '').localeCompare(b.lastName || '');
-        };
+        const sorter = (a, b) => (a.lastName || '').localeCompare(b.lastName || '');
 
         const getShift = (timeString) => {
             if (!timeString || !timeString.trim()) return { morning: false, afternoon: false };
@@ -643,13 +653,28 @@ const App = () => {
             return { morning, afternoon };
         };
 
-        // --- 2. Trova medici disponibili e strutture rilevanti ---
+        // --- 2. Isola gli appuntamenti del giorno ---
+        const appointmentsForTheDay = doctors
+            .filter(doctor => doctor.appointmentDate === selectedDate)
+            .map(doctor => ({
+                ...doctor,
+                structureNames: (doctor.structureIds || [])
+                    .map(id => structureMap[id])
+                    .filter(Boolean)
+                    .join(', ') || 'Nessuna struttura',
+            }))
+            .sort(sorter);
+
+        const appointmentDoctorIds = new Set(appointmentsForTheDay.map(d => d.id));
+        const doctorsForAvailabilityCheck = doctors.filter(d => !appointmentDoctorIds.has(d.id));
+
+        // --- 3. Trova medici disponibili e strutture rilevanti ---
         let mattina = {};
         let pomeriggio = {};
         let relevantStructureIds = new Set();
         let availableDoctorIds = new Set();
 
-        doctors.forEach(doctor => {
+        doctorsForAvailabilityCheck.forEach(doctor => {
             const availability = doctor.availability?.[dayOfWeek];
             const { morning, afternoon } = getShift(availability);
 
@@ -659,7 +684,6 @@ const App = () => {
 
                 doctorStructureIds.forEach(structId => {
                     relevantStructureIds.add(structId);
-                    // Inizializza il gruppo se non presente
                     if (!mattina[structId]) mattina[structId] = { id: structId, name: structureMap[structId] || 'Sconosciuta', disponibili: [], potenziali: [] };
                     if (!pomeriggio[structId]) pomeriggio[structId] = { id: structId, name: structureMap[structId] || 'Sconosciuta', disponibili: [], potenziali: [] };
 
@@ -669,44 +693,40 @@ const App = () => {
             }
         });
 
-        // --- 3. Trova medici potenziali ---
-        const potentialDoctors = doctors.filter(doctor => {
-            if (availableDoctorIds.has(doctor.id)) return false; // Non è già disponibile
+        // --- 4. Trova medici potenziali ---
+        const potentialDoctors = doctorsForAvailabilityCheck.filter(doctor => {
+            if (availableDoctorIds.has(doctor.id)) return false;
             const hasNoAvailability = !doctor.availability?.[dayOfWeek]?.trim();
             const isInRelevantStructure = doctor.structureIds?.some(id => relevantStructureIds.has(id));
             return hasNoAvailability && isInRelevantStructure;
         });
 
-        // --- 4. Aggiungi i medici potenziali alle loro strutture ---
+        // --- 5. Aggiungi i medici potenziali alle loro strutture ---
         potentialDoctors.forEach(doctor => {
             const doctorStructureIds = doctor.structureIds?.length > 0 ? doctor.structureIds : ['unassigned'];
             doctorStructureIds.forEach(structId => {
                 if (relevantStructureIds.has(structId)) {
-                    // Aggiungi alle liste potenziali di mattina e pomeriggio
-                    if (mattina[structId] && !mattina[structId].potenziali.some(d => d.id === doctor.id)) {
-                        mattina[structId].potenziali.push(doctor);
-                    }
-                    if (pomeriggio[structId] && !pomeriggio[structId].potenziali.some(d => d.id === doctor.id)) {
-                        pomeriggio[structId].potenziali.push(doctor);
-                    }
+                    if (mattina[structId] && !mattina[structId].potenziali.some(d => d.id === doctor.id)) mattina[structId].potenziali.push(doctor);
+                    if (pomeriggio[structId] && !pomeriggio[structId].potenziali.some(d => d.id === doctor.id)) pomeriggio[structId].potenziali.push(doctor);
                 }
             });
         });
 
-        // --- 5. Ordina tutto ---
+        // --- 6. Ordina tutto ---
         for (const structId in mattina) {
             mattina[structId].disponibili.sort(sorter);
-            mattina[structId].potenziali.sort((a, b) => (a.lastName || '').localeCompare(b.lastName || ''));
+            mattina[structId].potenziali.sort(sorter);
         }
         for (const structId in pomeriggio) {
             pomeriggio[structId].disponibili.sort(sorter);
-            pomeriggio[structId].potenziali.sort((a, b) => (a.lastName || '').localeCompare(b.lastName || ''));
+            pomeriggio[structId].potenziali.sort(sorter);
         }
 
-        // --- 6. Imposta lo stato ---
+        // --- 7. Imposta lo stato ---
         setOptimizationResult({
             date: selectedDate,
             dayOfWeek: dayOfWeek,
+            appointments: appointmentsForTheDay,
             mattina: mattina,
             pomeriggio: pomeriggio
         });

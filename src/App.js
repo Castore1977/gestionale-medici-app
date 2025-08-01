@@ -18,7 +18,7 @@ import {
     getDocs,
     writeBatch
 } from 'firebase/firestore';
-import { Plus, Trash2, Building, UserPlus, Save, X, Clock, Sun, Moon, Upload, Download, AlertCircle, Filter, Edit, Search, ChevronDown, LogOut, CalendarPlus, Zap, CalendarCheck, HelpCircle } from 'lucide-react';
+import { Plus, Trash2, Building, UserPlus, Save, X, Clock, Sun, Moon, Upload, Download, AlertCircle, Filter, Edit, Search, ChevronDown, LogOut, CalendarPlus, Zap, CalendarCheck, HelpCircle, Cake } from 'lucide-react';
 
 // --- CONFIGURAZIONE FIREBASE ---
 const firebaseConfig = {
@@ -29,6 +29,7 @@ const firebaseConfig = {
     messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
     appId: process.env.REACT_APP_FIREBASE_APP_ID
 };
+
 
 
 // --- COMPONENTE AUTENTICAZIONE ---
@@ -232,11 +233,22 @@ const DoctorModal = ({ isOpen, onClose, onSave, onDelete, structures, initialDat
                     </div>
                 </div>
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="grid md:grid-cols-2 gap-4"><input name="firstName" placeholder="Nome (es. Dott.)" value={doctorData.firstName} onChange={handleChange} className="bg-gray-700 p-3 rounded-lg" /><input name="lastName" placeholder="Cognome" value={doctorData.lastName} onChange={handleChange} className="bg-gray-700 p-3 rounded-lg" /></div>
-                    <input name="dateOfBirth" type="date" value={doctorData.dateOfBirth} onChange={handleChange} className="w-full bg-gray-700 p-3 rounded-lg" />
+                    <div className="grid md:grid-cols-2 gap-4">
+                        <input name="firstName" placeholder="Nome (es. Dott.)" value={doctorData.firstName} onChange={handleChange} className="bg-gray-700 p-3 rounded-lg" />
+                        <input name="lastName" placeholder="Cognome" value={doctorData.lastName} onChange={handleChange} className="bg-gray-700 p-3 rounded-lg" />
+                    </div>
+                    <div className="grid md:grid-cols-2 gap-4">
+                        <div>
+                            <h3 className="text-lg font-semibold mb-2">Data di Nascita</h3>
+                            <input name="dateOfBirth" type="date" value={doctorData.dateOfBirth} onChange={handleChange} className="w-full bg-gray-700 p-3 rounded-lg" />
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-semibold mb-2">Data Appuntamento</h3>
+                            <input name="appointmentDate" type="date" value={doctorData.appointmentDate} onChange={handleChange} className="w-full bg-gray-700 p-3 rounded-lg" />
+                        </div>
+                    </div>
                     <div><h3 className="text-lg font-semibold mb-2">Strutture Associate</h3><div className="grid grid-cols-2 sm:grid-cols-3 gap-2">{structures.map(s => (<label key={s.id} className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer ${doctorData.structureIds.includes(s.id) ? 'bg-cyan-600' : 'bg-gray-700'}`}><input type="checkbox" checked={doctorData.structureIds.includes(s.id)} onChange={() => handleStructureSelection(s.id)} className="form-checkbox h-5 w-5 text-cyan-500" /><span>{s.name}</span></label>))}</div></div>
                     <div><h3 className="text-lg font-semibold my-2">Ultima Visita (doppio click per oggi)</h3><input name="lastVisit" type="date" value={doctorData.lastVisit} onChange={handleChange} onDoubleClick={handleDateDoubleClick} className="w-full bg-gray-700 p-3 rounded-lg" /></div>
-                    <div><h3 className="text-lg font-semibold my-2">Data Appuntamento</h3><input name="appointmentDate" type="date" value={doctorData.appointmentDate} onChange={handleChange} className="w-full bg-gray-700 p-3 rounded-lg" /></div>
                     <div><h3 className="text-lg font-semibold my-2">Note</h3><textarea name="notes" placeholder="Note aggiuntive..." value={doctorData.notes} onChange={handleChange} className="w-full bg-gray-700 p-3 rounded-lg" rows="3"></textarea></div>
                     <div><h3 className="text-lg font-semibold mb-2 flex items-center gap-2"><Clock size={20}/> Orari</h3><div className="grid sm:grid-cols-2 gap-4">{Object.keys(doctorData.availability).map(day => (<div key={day}><label className="capitalize text-gray-400">{day}</label><input type="text" placeholder="Es. 9-12 / 15-18" value={doctorData.availability[day]} onChange={(e) => handleAvailabilityChange(day, e.target.value)} className="w-full mt-1 bg-gray-700 p-2 rounded-lg" /></div>))}</div></div>
                     <div className="flex justify-between items-center gap-4 pt-4">
@@ -450,6 +462,33 @@ const OptimizationResultModal = ({ isOpen, onClose, result }) => {
     );
 };
 
+// --- [NUOVO] MODALE PER COMPLEANNI ---
+const BirthdayModal = ({ isOpen, onClose, doctors }) => {
+    if (!isOpen) return null;
+    
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
+            <div className="bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-md">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-bold text-cyan-400 flex items-center gap-2"><Cake/> Compleanni Imminenti</h2>
+                    <button onClick={onClose} className="text-gray-400 hover:text-white"><X size={28}/></button>
+                </div>
+                <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+                    {doctors.length > 0 ? doctors.map(doc => {
+                        const [year, month, day] = doc.dateOfBirth.split('-').map(Number);
+                        return (
+                            <div key={doc.id} className="bg-gray-700 p-3 rounded-lg flex justify-between items-center">
+                                <span className="font-medium">{doc.firstName} {doc.lastName}</span>
+                                <span className="text-cyan-300 font-semibold">{`${day}/${month}`}</span>
+                            </div>
+                        );
+                    }) : <p className="text-gray-400">Nessun compleanno nei prossimi 10 giorni.</p>}
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 const App = () => {
     // --- STATI GLOBALI ---
@@ -477,6 +516,7 @@ const App = () => {
     const [selectedStructure, setSelectedStructure] = useState(null);
     const [isStructureDropdownOpen, setIsStructureDropdownOpen] = useState(false);
     const [modalState, setModalState] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {}, onCancel: null });
+    const [isBirthdayModalOpen, setIsBirthdayModalOpen] = useState(false);
     // --- STATI PER OTTIMIZZAZIONE ---
     const [isOptimizeDateModalOpen, setIsOptimizeDateModalOpen] = useState(false);
     const [optimizationResult, setOptimizationResult] = useState(null);
@@ -522,6 +562,42 @@ const App = () => {
             unsubStructures();
         };
     }, [user, db]);
+
+    // --- LOGICA COMPLEANNI ---
+    const upcomingBirthdays = useMemo(() => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const limitDate = new Date(today);
+        limitDate.setDate(today.getDate() + 10);
+        const currentYear = today.getFullYear();
+
+        const filtered = doctors.filter(doc => {
+            if (!doc.dateOfBirth) return false;
+            
+            const [year, month, day] = doc.dateOfBirth.split('-').map(Number);
+            const birthDateThisYear = new Date(currentYear, month - 1, day);
+            
+            if (birthDateThisYear < today) {
+                birthDateThisYear.setFullYear(currentYear + 1);
+            }
+            
+            return birthDateThisYear >= today && birthDateThisYear <= limitDate;
+        });
+
+        filtered.sort((a, b) => {
+            const [yearA, monthA, dayA] = a.dateOfBirth.split('-').map(Number);
+            let birthdayA = new Date(currentYear, monthA - 1, dayA);
+            if (birthdayA < today) birthdayA.setFullYear(currentYear + 1);
+            
+            const [yearB, monthB, dayB] = b.dateOfBirth.split('-').map(Number);
+            let birthdayB = new Date(currentYear, monthB - 1, dayB);
+            if (birthdayB < today) birthdayB.setFullYear(currentYear + 1);
+
+            return birthdayA - birthdayB;
+        });
+
+        return filtered;
+    }, [doctors]);
 
     // --- FUNZIONI DI AUTENTICAZIONE ---
     const handleRegister = (email, password) => {
@@ -905,7 +981,15 @@ const App = () => {
                             <h1 className="text-4xl font-bold text-cyan-400">Gestionale Medici</h1>
                             <p className="text-gray-400 mt-2">Utente: {user.email}</p>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                            {upcomingBirthdays.length > 0 && (
+                                <button onClick={() => setIsBirthdayModalOpen(true)} className="relative inline-flex items-center gap-2 bg-pink-600 hover:bg-pink-700 font-bold py-2 px-4 rounded-lg">
+                                    <Cake size={18} />
+                                    <span className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full bg-pink-400 text-xs font-bold text-white">
+                                        {upcomingBirthdays.length}
+                                    </span>
+                                </button>
+                            )}
                             <input type="file" id="import-file" className="hidden" accept=".json" onChange={handleImport} />
                             <label htmlFor="import-file" className="inline-flex items-center gap-2 bg-gray-700 hover:bg-gray-600 font-bold py-2 px-4 rounded-lg cursor-pointer"><Upload size={18} /> Importa</label>
                             <button onClick={handleExport} className="inline-flex items-center gap-2 bg-cyan-500 hover:bg-cyan-600 font-bold py-2 px-4 rounded-lg"><Download size={18} /> Esporta</button>
@@ -959,7 +1043,11 @@ const App = () => {
             </div>
             <DoctorModal isOpen={isDoctorModalOpen} onClose={handleCloseDoctorModal} onSave={handleSaveDoctor} onDelete={handleDeleteDoctor} structures={structures} initialData={selectedDoctor} onSetTodayAsLastVisit={handleSetTodayAsLastVisit} />
             <StructureModal isOpen={isStructureModalOpen} onClose={handleCloseStructureModal} onSave={handleSaveStructure} initialData={selectedStructure} />
-            {/* Nuove modali per l'ottimizzazione */}
+            <BirthdayModal 
+                isOpen={isBirthdayModalOpen}
+                onClose={() => setIsBirthdayModalOpen(false)}
+                doctors={upcomingBirthdays}
+            />
             <OptimizeDateModal 
                 isOpen={isOptimizeDateModalOpen}
                 onClose={() => setIsOptimizeDateModalOpen(false)}
